@@ -31,6 +31,8 @@ def fetch_all():
     init_db()
     total_new = 0
     for s in [s for s in load_sources() if s.get("enabled")]:
+        if s["parser"] == "browser":
+            continue  # browser 源由 ai-radar-scrape skill 用 browser-use 抓取（见 src/ingest.py）
         parser = PARSERS.get(s["parser"])
         if parser is None:
             print(f"  ✗ {s['source_label']}: 未知 parser '{s['parser']}'", file=sys.stderr)
@@ -57,9 +59,10 @@ def fetch_all():
 
 
 def main():
-    print("🔍 抓取中…")
-    new = fetch_all()
-    print(f"✨ 本次新增 {new} 条")
+    # --render-only：跳过抓取，只做 retention + 渲染（ai-radar-scrape skill 抓完后调用）
+    if "--render-only" not in sys.argv:
+        print("🔍 抓取中…")
+        print(f"✨ 本次新增 {fetch_all()} 条")
 
     purged = purge_old(RETENTION_DAYS)
     items = all_items()

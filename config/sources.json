@@ -101,15 +101,15 @@
       "description": "Hugging Face 社区本周热门论文"
     },
     {
-      "id": "anthropic-news",
-      "source_label": "Anthropic",
+      "id": "anthropic-research",
+      "source_label": "Anthropic Research",
       "category": "研究",
-      "parser": "rss",
-      "url": "https://www.anthropic.com/news",
-      "enabled": false,
+      "parser": "browser",
+      "url": "https://www.anthropic.com/research",
+      "enabled": true,
       "limit": 10,
-      "_note": "实测无公开 RSS（/rss.xml /feed 均 404），/news 完全客户端渲染、curl 抓不到内容。和 Twitter 同样需 browser-use，留到 browser-use 切片再接",
-      "description": "Claude 研究（无 RSS，待 browser-use）"
+      "description": "Claude 背后的研究",
+      "open": "link"
     },
     {
       "id": "google-deepmind",
@@ -380,6 +380,193 @@
       "enabled": true,
       "limit": 6,
       "description": "LLM 训练分析"
+    },
+    {
+      "id": "anthropic-newsroom",
+      "source_label": "Anthropic Newsroom",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://www.anthropic.com/news",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Anthropic 产品与公告"
+    },
+    {
+      "id": "x-list-ai",
+      "source_label": "X · AI 列表",
+      "category": "推文",
+      "parser": "browser",
+      "url": "https://x.com/i/lists/1597115448146898944",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "X AI 列表精选"
+    },
+    {
+      "id": "x-list-following",
+      "source_label": "X · 我的 AI 关注",
+      "category": "推文",
+      "parser": "browser",
+      "url": "https://x.com/i/lists/2056920461594837041",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "我关注的 AI 账号"
+    },
+    {
+      "id": "meta-ai",
+      "source_label": "Meta AI",
+      "category": "研究",
+      "parser": "browser",
+      "url": "https://ai.meta.com/blog/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "LLaMA、SAM 等"
+    },
+    {
+      "id": "microsoft-research",
+      "source_label": "Microsoft Research",
+      "category": "研究",
+      "parser": "browser",
+      "url": "https://www.microsoft.com/en-us/research/blog/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "微软研究院"
+    },
+    {
+      "id": "google-ai-blog",
+      "source_label": "Google AI Blog",
+      "category": "研究",
+      "parser": "browser",
+      "url": "https://blog.google/technology/ai/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Google AI 官方"
+    },
+    {
+      "id": "xai",
+      "source_label": "xAI Blog",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://x.ai/news",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Grok 模型"
+    },
+    {
+      "id": "cursor",
+      "source_label": "Cursor Blog",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://cursor.com/blog",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "AI 编程工具"
+    },
+    {
+      "id": "perplexity",
+      "source_label": "Perplexity Blog",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://www.perplexity.ai/hub",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "AI 搜索"
+    },
+    {
+      "id": "suno",
+      "source_label": "Suno Blog",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://suno.com/blog",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "AI 音乐"
+    },
+    {
+      "id": "runway",
+      "source_label": "Runway Research",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://runwayml.com/research",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "AI 视频生成"
+    },
+    {
+      "id": "stability",
+      "source_label": "Stability AI",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://stability.ai/news",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Stable Diffusion"
+    },
+    {
+      "id": "cohere",
+      "source_label": "Cohere Blog",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://cohere.com/blog",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "企业级 LLM"
+    },
+    {
+      "id": "lmsys",
+      "source_label": "LMSYS Blog",
+      "category": "研究",
+      "parser": "browser",
+      "url": "https://lmsys.org/blog",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "模型评测"
+    },
+    {
+      "id": "the-batch",
+      "source_label": "The Batch (Andrew Ng)",
+      "category": "Newsletter",
+      "parser": "browser",
+      "url": "https://www.deeplearning.ai/the-batch/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "每周 AI 通讯"
+    },
+    {
+      "id": "unite-ai",
+      "source_label": "Unite.AI",
+      "category": "资讯",
+      "parser": "browser",
+      "url": "https://www.unite.ai/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "AI 新闻聚合"
+    },
+    {
+      "id": "papers-with-code",
+      "source_label": "Papers With Code",
+      "category": "论文",
+      "parser": "browser",
+      "url": "https://paperswithcode.com/",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "论文+代码+排行"
     }
   ]
 }
