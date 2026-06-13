@@ -1,0 +1,156 @@
+"""纯 Python 渲染静态站 → dist/index.html。
+
+无模板引擎、无构建链。所有来自外站的字符串渲染前过 html.escape；href 只允许 http(s)。
+首页 = 全量 feed：按天分段，每条带分类色块 + 来源徽章 + 链回原文（标清来源）。
+分类筛选 + 搜索是 client-side（内联 DOM 过滤，规模小到不需要单独的 search.json）。
+"""
+
+import html
+from datetime import datetime
+from pathlib import Path
+
+DIST = Path(__file__).resolve().parent.parent / "dist"
+
+# 媒介分类 → chip 配色（Tailwind 类）
+_CAT_COLORS = {
+    "论文": "bg-violet-100 text-violet-700",
+    "研究": "bg-blue-100 text-blue-700",
+    "产品": "bg-emerald-100 text-emerald-700",
+    "视频": "bg-rose-100 text-rose-700",
+    "播客": "bg-amber-100 text-amber-700",
+    "Newsletter": "bg-sky-100 text-sky-700",
+    "推文": "bg-cyan-100 text-cyan-700",
+}
+_CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
+
+
+def _e(s):
+    return html.escape(s or "")
+
+
+def _safe_url(url):
+    u = (url or "").strip()
+    return u if u.lower().startswith(("http://", "https://")) else "#"
+
+
+def _day(item):
+    return (item.get("fetched_at") or "")[:10] or "未知日期"
+
+
+def _card(item):
+    title = item.get("title_zh") or item.get("title") or ""
+    summary = item.get("summary_zh") or item.get("summary") or ""
+    cat = item.get("category") or ""
+    chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
+    when = item.get("published_at") or _day(item)
+    search_blob = _e(f"{title} {summary} {item.get('source_label','')}".lower())
+    summary_html = (
+        f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(summary)}</p>'
+        if summary else ""
+    )
+    return f"""      <article class="item border-b border-zinc-100 py-4" data-category="{_e(cat)}" data-text="{search_blob}">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
+          <span class="font-mono text-zinc-400">{_e(item.get('source_label',''))}</span>
+          <span class="text-zinc-300">·</span>
+          <span class="text-zinc-400">{_e(when)}</span>
+        </div>
+        <a href="{_e(_safe_url(item.get('url','')))}" target="_blank" rel="noopener"
+           class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">
+          {_e(title)} <span class="text-zinc-300">↗</span>
+        </a>
+        {summary_html}
+      </article>"""
+
+
+def _filter_bar(categories):
+    btns = ['<button class="cat-btn rounded-full px-3 py-1 text-sm" data-cat="">全部</button>']
+    for c in categories:
+        btns.append(f'<button class="cat-btn rounded-full px-3 py-1 text-sm" data-cat="{_e(c)}">{_e(c)}</button>')
+    return "\n        ".join(btns)
+
+
+def render_site(items, out_dir=None):
+    out = Path(out_dir) if out_dir else DIST
+    out.mkdir(parents=True, exist_ok=True)
+
+    categories = sorted({i.get("category", "") for i in items if i.get("category")})
+
+    # 按天分段（items 已是最新在前）
+    sections, cur_day, buf = [], None, []
+    for it in items:
+        d = _day(it)
+        if d != cur_day:
+            if buf:
+                sections.append((cur_day, buf))
+            cur_day, buf = d, []
+        buf.append(_card(it))
+    if buf:
+        sections.append((cur_day, buf))
+
+    body = []
+    for day, cards in sections:
+        body.append(
+            f'      <section class="day-section">\n'
+            f'        <h2 class="sticky top-[57px] z-0 bg-zinc-50/90 py-2 text-sm font-semibold text-zinc-400 backdrop-blur">{_e(day)}</h2>\n'
+            + "\n".join(cards)
+            + "\n      </section>"
+        )
+    body_html = "\n".join(body) if body else '<p class="py-16 text-center text-zinc-400">暂无内容，跑一次 <code>python3 src/run.py</code> 抓取。</p>'
+
+    generated = datetime.now().strftime("%Y-%m-%d %H:%M")
+    page = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Radar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-800 antialiased">
+  <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
+    <div class="mx-auto flex max-w-2xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+      <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
+      <input id="search" type="search" placeholder="搜索…"
+             class="ml-auto w-40 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
+      <div id="cats" class="flex w-full flex-wrap gap-1.5">
+        {_filter_bar(categories)}
+      </div>
+    </div>
+  </header>
+  <main class="mx-auto max-w-2xl px-4">
+{body_html}
+    <p class="py-8 text-center text-xs text-zinc-300">共 {len(items)} 条 · 生成于 {generated}</p>
+  </main>
+  <script>
+    const items = [...document.querySelectorAll('.item')];
+    let activeCat = '';
+    function apply() {{
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      items.forEach(el => {{
+        const okCat = !activeCat || el.dataset.category === activeCat;
+        const okText = !q || el.dataset.text.includes(q);
+        el.style.display = (okCat && okText) ? '' : 'none';
+      }});
+      document.querySelectorAll('.day-section').forEach(sec => {{
+        const any = [...sec.querySelectorAll('.item')].some(el => el.style.display !== 'none');
+        sec.style.display = any ? '' : 'none';
+      }});
+    }}
+    document.getElementById('search').addEventListener('input', apply);
+    document.querySelectorAll('.cat-btn').forEach(btn => btn.addEventListener('click', () => {{
+      activeCat = btn.dataset.cat;
+      document.querySelectorAll('.cat-btn').forEach(b => {{
+        const on = (b === btn);
+        b.classList.toggle('bg-zinc-800', on);
+        b.classList.toggle('text-white', on);
+      }});
+      apply();
+    }}));
+  </script>
+</body>
+</html>
+"""
+    index = out / "index.html"
+    index.write_text(page, encoding="utf-8")
+    return index

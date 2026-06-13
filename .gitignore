@@ -1,0 +1,14 @@
+# 工具配置不入 git（A1 守卫）
+CLAUDE.md
+.claude/
+
+# 运行产物
+data/*.db
+data/*.db-*
+dist/
+__pycache__/
+*.pyc
+.venv/
+
+# 系统垃圾
+.DS_Store

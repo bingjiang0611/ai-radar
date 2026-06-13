@@ -1,0 +1,56 @@
+{
+  "sources": [
+    {
+      "id": "import-ai",
+      "source_label": "Import AI (Jack Clark)",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://importai.substack.com/feed",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "interconnects",
+      "source_label": "Interconnects (Nathan Lambert)",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.interconnects.ai/feed",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "lex-fridman-yt",
+      "source_label": "Lex Fridman (YouTube)",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCSHZKyawb77ixDdsGog4iWA",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "hf-daily-papers",
+      "source_label": "Hugging Face Daily Papers",
+      "category": "论文",
+      "parser": "json_api",
+      "url": "https://huggingface.co/api/daily_papers",
+      "enabled": true,
+      "limit": 15,
+      "json": {
+        "items_path": "",
+        "title": "paper.title",
+        "url_template": "https://huggingface.co/papers/{paper.id}",
+        "summary_template": "{paper.upvotes} upvotes"
+      }
+    },
+    {
+      "id": "anthropic-news",
+      "source_label": "Anthropic",
+      "category": "研究",
+      "parser": "rss",
+      "url": "https://www.anthropic.com/rss.xml",
+      "enabled": false,
+      "limit": 10,
+      "_note": "Anthropic 是否有公开 RSS 待验证；先 disabled，确认后再开"
+    }
+  ]
+}
