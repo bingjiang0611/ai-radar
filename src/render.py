@@ -32,6 +32,9 @@ _CAT_COLORS = {
 }
 _CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
 
+# 分类图标（与 _INDEX_SCRIPT 里来源栏的 CAT_ICON 一致）
+_CAT_ICON = {"论文": "📄", "研究": "🔬", "产品": "🚀", "视频": "▶️", "播客": "🎙️", "Newsletter": "✉️", "资讯": "📰", "推文": "🐦"}
+
 # 详情页正文样式（Tailwind CDN 不含 typography 插件，手写关键排版）
 _CONTENT_STYLE = """
 <style>
@@ -102,7 +105,13 @@ _INDEX_SCRIPT = """
   }
   document.querySelectorAll('.cat-btn').forEach(btn => btn.addEventListener('click', () => {
     activeCat = btn.dataset.cat; activeSource = '';
-    document.querySelectorAll('.cat-btn').forEach(b => { const on = (b === btn); b.classList.toggle('bg-zinc-800', on); b.classList.toggle('text-white', on); });
+    document.querySelectorAll('.cat-btn').forEach(b => {
+      const on = (b === btn);
+      b.classList.toggle('bg-zinc-100', on);
+      b.classList.toggle('font-medium', on);
+      b.classList.toggle('text-zinc-900', on);
+      b.classList.toggle('text-zinc-500', !on);
+    });
     buildSources(); apply();
   }));
   searchEl.addEventListener('input', apply);
@@ -217,9 +226,16 @@ def _card(item, mode="detail"):
 
 
 def _category_tabs(categories):
-    btns = ['<button class="cat-btn rounded-full px-3 py-1 text-sm bg-zinc-800 text-white" data-cat="">全部</button>']
+    cls = ("cat-btn flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm "
+           "md:w-full md:rounded-md md:py-1.5")
+    # 全部：默认激活（浅灰），无图标
+    btns = [f'<button class="{cls} bg-zinc-100 font-medium text-zinc-900" data-cat="">'
+            '<span class="truncate">全部</span></button>']
     for c in categories:
-        btns.append(f'<button class="cat-btn rounded-full px-3 py-1 text-sm text-zinc-600" data-cat="{_e(c)}">{_e(c)}</button>')
+        icon = _CAT_ICON.get(c, "")
+        ic = f'<span class="shrink-0">{icon}</span>' if icon else ""
+        btns.append(f'<button class="{cls} text-zinc-500" data-cat="{_e(c)}">{ic}'
+                    f'<span class="truncate">{_e(c)}</span></button>')
     return "\n          ".join(btns)
 
 
@@ -251,21 +267,20 @@ def _render_index(items, out, interactions, descriptions):
 </head>
 <body class="bg-zinc-50 text-zinc-800 antialiased">
   <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
-    <div class="mx-auto max-w-5xl px-4 py-2.5">
-      <div class="flex items-center gap-3">
-        <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
-        <input id="search" type="search" placeholder="搜索…"
-               class="ml-auto w-40 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
-      </div>
-      <div id="cats" class="mt-2 flex flex-wrap gap-1.5">
-          {_category_tabs(categories)}
-      </div>
+    <div class="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
+      <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
+      <input id="search" type="search" placeholder="搜索…"
+             class="ml-auto w-44 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
     </div>
   </header>
   <div class="mx-auto max-w-5xl gap-8 px-4 md:flex">
-    <aside class="md:sticky md:top-[112px] md:h-[calc(100vh-120px)] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
-      <p class="hidden pt-4 text-xs font-semibold text-zinc-400 md:block">来源</p>
-      <div id="sources" class="flex gap-1.5 overflow-x-auto py-3 md:flex-col md:gap-0.5 md:py-2"></div>
+    <aside class="md:sticky md:top-[57px] md:h-[calc(100vh-65px)] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto md:py-1">
+      <p class="hidden pt-3 text-xs font-semibold text-zinc-400 md:block">分类</p>
+      <div id="cats" class="flex gap-1.5 overflow-x-auto py-2 md:flex-col md:gap-0.5">
+          {_category_tabs(categories)}
+      </div>
+      <p class="hidden pt-3 text-xs font-semibold text-zinc-400 md:block">来源</p>
+      <div id="sources" class="flex gap-1.5 overflow-x-auto py-2 md:flex-col md:gap-0.5"></div>
     </aside>
     <main class="min-w-0 max-w-2xl flex-1">
 {body_html}
