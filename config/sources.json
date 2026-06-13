@@ -19,6 +19,24 @@
       "limit": 10
     },
     {
+      "id": "nlp-newsletter",
+      "source_label": "NLP Newsletter (Elvis)",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://nlp.elvissaravia.com/feed",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "latent-space",
+      "source_label": "Latent Space",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.latent.space/feed",
+      "enabled": true,
+      "limit": 10
+    },
+    {
       "id": "lex-fridman-yt",
       "source_label": "Lex Fridman (YouTube)",
       "category": "视频",

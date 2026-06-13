@@ -1,8 +1,9 @@
 """纯 Python 渲染静态站 → dist/index.html。
 
 无模板引擎、无构建链。所有来自外站的字符串渲染前过 html.escape；href 只允许 http(s)。
-首页 = 全量 feed：按天分段，每条带分类色块 + 来源徽章 + 链回原文（标清来源）。
-分类筛选 + 搜索是 client-side（内联 DOM 过滤，规模小到不需要单独的 search.json）。
+布局：顶部分类 tab + 搜索；左侧来源栏（按当前分类动态算来源 + 计数，点击二级筛选，
+窄屏收成顶部横向胶囊条）；右侧全量 feed，按天分段，每条带分类色块 + 来源徽章 + 链回原文。
+分类/来源/搜索三重过滤都是 client-side（规模小到不需要单独的 search.json）。
 """
 
 import html
@@ -23,6 +24,76 @@ _CAT_COLORS = {
 }
 _CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
 
+# client-side 三重过滤（分类 tab + 来源栏 + 搜索）。
+# 来源列表按当前分类动态重算计数，单一真源 = 渲染出来的 .item DOM。
+# 来源按钮用 createElement + textContent 构建（不用 innerHTML，避免来源名注入）。
+_SCRIPT = """
+<script>
+  const items = [...document.querySelectorAll('.item')];
+  const searchEl = document.getElementById('search');
+  const sourcesEl = document.getElementById('sources');
+  let activeCat = '', activeSource = '';
+
+  const inCat = el => !activeCat || el.dataset.category === activeCat;
+
+  function makeSourceBtn(label, count, src) {
+    const b = document.createElement('button');
+    b.className = 'src-btn flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm md:w-full md:justify-between md:rounded-md md:py-1.5';
+    b.dataset.src = src;
+    const name = document.createElement('span');
+    name.className = 'truncate';
+    name.textContent = label;
+    const cnt = document.createElement('span');
+    cnt.className = 'text-xs text-zinc-400';
+    cnt.textContent = count;
+    b.append(name, cnt);
+    if (src === activeSource) b.classList.add('bg-zinc-100', 'font-medium', 'text-zinc-900');
+    else b.classList.add('text-zinc-500');
+    b.addEventListener('click', () => { activeSource = src; buildSources(); apply(); });
+    return b;
+  }
+
+  function buildSources() {
+    const counts = new Map();
+    items.forEach(el => { if (inCat(el)) counts.set(el.dataset.source, (counts.get(el.dataset.source) || 0) + 1); });
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    sourcesEl.replaceChildren();
+    sourcesEl.appendChild(makeSourceBtn('全部', total, ''));
+    entries.forEach(([src, c]) => sourcesEl.appendChild(makeSourceBtn(src, c, src)));
+  }
+
+  function apply() {
+    const q = searchEl.value.trim().toLowerCase();
+    items.forEach(el => {
+      const ok = inCat(el)
+        && (!activeSource || el.dataset.source === activeSource)
+        && (!q || el.dataset.text.includes(q));
+      el.style.display = ok ? '' : 'none';
+    });
+    document.querySelectorAll('.day-section').forEach(sec => {
+      const any = [...sec.querySelectorAll('.item')].some(el => el.style.display !== 'none');
+      sec.style.display = any ? '' : 'none';
+    });
+  }
+
+  document.querySelectorAll('.cat-btn').forEach(btn => btn.addEventListener('click', () => {
+    activeCat = btn.dataset.cat;
+    activeSource = '';  // 切分类时重置来源筛选
+    document.querySelectorAll('.cat-btn').forEach(b => {
+      const on = (b === btn);
+      b.classList.toggle('bg-zinc-800', on);
+      b.classList.toggle('text-white', on);
+    });
+    buildSources();
+    apply();
+  }));
+  searchEl.addEventListener('input', apply);
+  buildSources();
+  apply();
+</script>
+"""
+
 
 def _e(s):
     return html.escape(s or "")
@@ -42,16 +113,17 @@ def _card(item):
     summary = item.get("summary_zh") or item.get("summary") or ""
     cat = item.get("category") or ""
     chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
+    src = item.get("source_label", "")
     when = item.get("published_at") or _day(item)
-    search_blob = _e(f"{title} {summary} {item.get('source_label','')}".lower())
+    search_blob = _e(f"{title} {summary} {src}".lower())
     summary_html = (
         f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(summary)}</p>'
         if summary else ""
     )
-    return f"""      <article class="item border-b border-zinc-100 py-4" data-category="{_e(cat)}" data-text="{search_blob}">
+    return f"""      <article class="item border-b border-zinc-100 py-4" data-category="{_e(cat)}" data-source="{_e(src)}" data-text="{search_blob}">
         <div class="flex items-center gap-2 text-xs">
           <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
-          <span class="font-mono text-zinc-400">{_e(item.get('source_label',''))}</span>
+          <span class="font-mono text-zinc-400">{_e(src)}</span>
           <span class="text-zinc-300">·</span>
           <span class="text-zinc-400">{_e(when)}</span>
         </div>
@@ -63,11 +135,11 @@ def _card(item):
       </article>"""
 
 
-def _filter_bar(categories):
-    btns = ['<button class="cat-btn rounded-full px-3 py-1 text-sm" data-cat="">全部</button>']
+def _category_tabs(categories):
+    btns = ['<button class="cat-btn rounded-full px-3 py-1 text-sm bg-zinc-800 text-white" data-cat="">全部</button>']
     for c in categories:
-        btns.append(f'<button class="cat-btn rounded-full px-3 py-1 text-sm" data-cat="{_e(c)}">{_e(c)}</button>')
-    return "\n        ".join(btns)
+        btns.append(f'<button class="cat-btn rounded-full px-3 py-1 text-sm text-zinc-600" data-cat="{_e(c)}">{_e(c)}</button>')
+    return "\n          ".join(btns)
 
 
 def render_site(items, out_dir=None):
@@ -92,7 +164,7 @@ def render_site(items, out_dir=None):
     for day, cards in sections:
         body.append(
             f'      <section class="day-section">\n'
-            f'        <h2 class="sticky top-[57px] z-0 bg-zinc-50/90 py-2 text-sm font-semibold text-zinc-400 backdrop-blur">{_e(day)}</h2>\n'
+            f'        <h2 class="py-2 text-sm font-semibold text-zinc-400">{_e(day)}</h2>\n'
             + "\n".join(cards)
             + "\n      </section>"
         )
@@ -109,45 +181,28 @@ def render_site(items, out_dir=None):
 </head>
 <body class="bg-zinc-50 text-zinc-800 antialiased">
   <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
-    <div class="mx-auto flex max-w-2xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
-      <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
-      <input id="search" type="search" placeholder="搜索…"
-             class="ml-auto w-40 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
-      <div id="cats" class="flex w-full flex-wrap gap-1.5">
-        {_filter_bar(categories)}
+    <div class="mx-auto max-w-5xl px-4 py-2.5">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
+        <input id="search" type="search" placeholder="搜索…"
+               class="ml-auto w-40 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
+      </div>
+      <div id="cats" class="mt-2 flex flex-wrap gap-1.5">
+          {_category_tabs(categories)}
       </div>
     </div>
   </header>
-  <main class="mx-auto max-w-2xl px-4">
+  <div class="mx-auto max-w-5xl gap-8 px-4 md:flex">
+    <aside class="md:sticky md:top-[112px] md:h-[calc(100vh-120px)] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
+      <p class="hidden pt-4 text-xs font-semibold text-zinc-400 md:block">来源</p>
+      <div id="sources" class="flex gap-1.5 overflow-x-auto py-3 md:flex-col md:gap-0.5 md:py-2"></div>
+    </aside>
+    <main class="min-w-0 max-w-2xl flex-1">
 {body_html}
-    <p class="py-8 text-center text-xs text-zinc-300">共 {len(items)} 条 · 生成于 {generated}</p>
-  </main>
-  <script>
-    const items = [...document.querySelectorAll('.item')];
-    let activeCat = '';
-    function apply() {{
-      const q = document.getElementById('search').value.trim().toLowerCase();
-      items.forEach(el => {{
-        const okCat = !activeCat || el.dataset.category === activeCat;
-        const okText = !q || el.dataset.text.includes(q);
-        el.style.display = (okCat && okText) ? '' : 'none';
-      }});
-      document.querySelectorAll('.day-section').forEach(sec => {{
-        const any = [...sec.querySelectorAll('.item')].some(el => el.style.display !== 'none');
-        sec.style.display = any ? '' : 'none';
-      }});
-    }}
-    document.getElementById('search').addEventListener('input', apply);
-    document.querySelectorAll('.cat-btn').forEach(btn => btn.addEventListener('click', () => {{
-      activeCat = btn.dataset.cat;
-      document.querySelectorAll('.cat-btn').forEach(b => {{
-        const on = (b === btn);
-        b.classList.toggle('bg-zinc-800', on);
-        b.classList.toggle('text-white', on);
-      }});
-      apply();
-    }}));
-  </script>
+      <p class="py-8 text-center text-xs text-zinc-300">共 {len(items)} 条 · 生成于 {generated}</p>
+    </main>
+  </div>
+{_SCRIPT}
 </body>
 </html>
 """
