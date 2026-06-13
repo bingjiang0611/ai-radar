@@ -17,7 +17,7 @@ from parsers import PARSERS      # noqa: E402
 from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
 from render import render_site   # noqa: E402
 
-RETENTION_DAYS = 30  # 只保留近一个月内容
+RETENTION_DAYS = 15  # 只保留近 15 天内容（控站点/图片体积）
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "config" / "sources.json"

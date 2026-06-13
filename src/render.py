@@ -124,6 +124,17 @@ _DETAIL_SCRIPT = """
       copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制链接'; }, 1500);
     });
   });
+  // 点击封面门面 → 加载 YouTube 播放器（用户手势触发）
+  document.querySelectorAll('.yt-facade').forEach(f => f.addEventListener('click', () => {
+    const id = f.dataset.id;
+    if (!/^[\\w-]{11}$/.test(id)) return;
+    const ifr = document.createElement('iframe');
+    ifr.className = 'h-full w-full rounded-lg';
+    ifr.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+    ifr.allowFullscreen = true;
+    ifr.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1';
+    f.replaceWith(ifr);
+  }));
 </script>
 """
 
@@ -142,18 +153,21 @@ def _day(item):
 
 
 def _youtube_embed(url):
-    """youtube 链接 → 站内可播的 16:9 内嵌播放器；非 youtube 返回 ""。
-    iframe 由本函数生成（不过 nh3，nh3 会剥 iframe）；video id 限 [A-Za-z0-9_-]{11}，无注入。"""
+    """youtube 链接 → 缩略图门面（lite-youtube）：先显示封面+播放钮，点击才加载播放器。
+    避免一进页面就内嵌 iframe（YouTube 反爬「确认非 bot」在无用户手势时更易触发），也更省资源。
+    iframe 在点击时由 _DETAIL_SCRIPT 用 createElement 生成（不过 nh3）；video id 限 [A-Za-z0-9_-]{11}，无注入。"""
     m = _YT_RE.search(url or "")
     if not m:
         return ""
     vid = m.group(1)
     return (
         '<div class="aspect-video my-5">'
-        f'<iframe class="h-full w-full rounded-lg" src="https://www.youtube-nocookie.com/embed/{vid}" '
-        'title="YouTube" frameborder="0" allowfullscreen '
-        'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">'
-        "</iframe></div>"
+        f'<div class="yt-facade group relative h-full w-full cursor-pointer overflow-hidden rounded-lg bg-zinc-900" data-id="{vid}">'
+        f'<img src="https://i.ytimg.com/vi/{vid}/hqdefault.jpg" alt="" loading="lazy" class="h-full w-full object-cover opacity-90 transition group-hover:opacity-100">'
+        '<span class="absolute inset-0 flex items-center justify-center">'
+        '<span class="flex h-14 w-20 items-center justify-center rounded-2xl bg-black/70 text-white transition group-hover:bg-red-600">'
+        '<svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+        "</span></span></div></div>"
     )
 
 
