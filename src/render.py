@@ -55,27 +55,36 @@ _INDEX_SCRIPT = """
   const sourcesEl = document.getElementById('sources');
   let activeCat = '', activeSource = '';
   const inCat = el => !activeCat || el.dataset.category === activeCat;
+  // 来源类型标识（按媒介分类）
+  const CAT_ICON = {'论文':'📄','研究':'🔬','产品':'🚀','视频':'▶️','播客':'🎙️','Newsletter':'✉️','推文':'🐦'};
 
-  function makeSourceBtn(label, count, src) {
+  function makeSourceBtn(label, count, src, icon) {
     const b = document.createElement('button');
     b.className = 'src-btn flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm md:w-full md:justify-between md:rounded-md md:py-1.5';
     b.dataset.src = src;
-    const name = document.createElement('span'); name.className = 'truncate'; name.textContent = label;
-    const cnt = document.createElement('span'); cnt.className = 'text-xs text-zinc-400'; cnt.textContent = count;
-    b.append(name, cnt);
+    const left = document.createElement('span'); left.className = 'flex min-w-0 items-center gap-1.5';
+    if (icon) { const ic = document.createElement('span'); ic.className = 'shrink-0'; ic.textContent = icon; left.appendChild(ic); }
+    const name = document.createElement('span'); name.className = 'truncate'; name.textContent = label; left.appendChild(name);
+    const cnt = document.createElement('span'); cnt.className = 'shrink-0 text-xs text-zinc-400'; cnt.textContent = count;
+    b.append(left, cnt);
     b.classList.add(src === activeSource ? 'bg-zinc-100' : 'text-zinc-500');
     if (src === activeSource) b.classList.add('font-medium', 'text-zinc-900');
     b.addEventListener('click', () => { activeSource = src; buildSources(); apply(); });
     return b;
   }
   function buildSources() {
-    const counts = new Map();
-    items.forEach(el => { if (inCat(el)) counts.set(el.dataset.source, (counts.get(el.dataset.source) || 0) + 1); });
+    const counts = new Map(), cats = new Map();
+    items.forEach(el => {
+      if (!inCat(el)) return;
+      const s = el.dataset.source;
+      counts.set(s, (counts.get(s) || 0) + 1);
+      cats.set(s, el.dataset.category);
+    });
     const total = [...counts.values()].reduce((a, b) => a + b, 0);
     const entries = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
     sourcesEl.replaceChildren();
-    sourcesEl.appendChild(makeSourceBtn('全部', total, ''));
-    entries.forEach(([src, c]) => sourcesEl.appendChild(makeSourceBtn(src, c, src)));
+    sourcesEl.appendChild(makeSourceBtn('全部', total, '', ''));
+    entries.forEach(([src, c]) => sourcesEl.appendChild(makeSourceBtn(src, c, src, CAT_ICON[cats.get(src)] || '•')));
   }
   function apply() {
     const q = searchEl.value.trim().toLowerCase();
