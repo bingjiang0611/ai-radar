@@ -9,9 +9,13 @@
 """
 
 import html
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
+
+# 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
+_YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
 
 DIST = Path(__file__).resolve().parent.parent / "dist"
 
@@ -123,6 +127,22 @@ def _safe_url(url):
 
 def _day(item):
     return (item.get("fetched_at") or "")[:10] or "未知日期"
+
+
+def _youtube_embed(url):
+    """youtube 链接 → 站内可播的 16:9 内嵌播放器；非 youtube 返回 ""。
+    iframe 由本函数生成（不过 nh3，nh3 会剥 iframe）；video id 限 [A-Za-z0-9_-]{11}，无注入。"""
+    m = _YT_RE.search(url or "")
+    if not m:
+        return ""
+    vid = m.group(1)
+    return (
+        '<div class="aspect-video my-5">'
+        f'<iframe class="h-full w-full rounded-lg" src="https://www.youtube-nocookie.com/embed/{vid}" '
+        'title="YouTube" frameborder="0" allowfullscreen '
+        'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">'
+        "</iframe></div>"
+    )
 
 
 def _head(title):
@@ -262,6 +282,7 @@ def _render_detail(item, out):
     chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
     url = _safe_url(item.get("url", ""))
     when = item.get("published_at") or _day(item)
+    embed = _youtube_embed(item.get("url", ""))  # 视频→站内可播
 
     page = f"""{_head(head_title)}
 {_CONTENT_STYLE}
@@ -287,6 +308,7 @@ def _render_detail(item, out):
       <button id="copy-link" data-url="{_e(item.get('url',''))}"
               class="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium hover:border-blue-400 hover:text-blue-600">复制链接</button>
     </div>
+    {embed}
 {_tabs(item)}
   </main>
 {_DETAIL_SCRIPT}

@@ -196,6 +196,17 @@ class TestRender(unittest.TestCase):
         self.assertIn("原文", panel)
         self.assertIn("中文翻译", panel)
 
+    def test_youtube_embed(self):
+        for u in ("https://www.youtube.com/watch?v=rzVhPTSNWnE",
+                  "https://youtu.be/rzVhPTSNWnE",
+                  "https://www.youtube.com/shorts/rzVhPTSNWnE"):
+            e = render._youtube_embed(u)
+            self.assertIn("youtube-nocookie.com/embed/rzVhPTSNWnE", e)
+            self.assertIn("<iframe", e)
+
+    def test_youtube_embed_empty_for_non_youtube(self):
+        self.assertEqual(render._youtube_embed("https://example.com/x"), "")
+
 
 class TestDedup(unittest.TestCase):
     def setUp(self):
