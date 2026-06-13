@@ -79,7 +79,7 @@
       "parser": "json_api",
       "url": "https://huggingface.co/api/daily_papers?week={week}",
       "enabled": true,
-      "limit": 15,
+      "limit": 10,
       "json": {
         "items_path": "",
         "title": "paper.title",
