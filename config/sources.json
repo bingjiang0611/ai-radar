@@ -409,10 +409,11 @@
       "category": "研究",
       "parser": "browser",
       "url": "https://www.microsoft.com/en-us/research/blog/",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "微软研究院"
+      "description": "微软研究院",
+      "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
     },
     {
       "id": "google-ai-blog",
@@ -420,10 +421,11 @@
       "category": "研究",
       "parser": "browser",
       "url": "https://blog.google/technology/ai/",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "Google AI 官方"
+      "description": "Google AI 官方",
+      "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
     },
     {
       "id": "xai",
@@ -431,10 +433,11 @@
       "category": "产品",
       "parser": "browser",
       "url": "https://x.ai/news",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "Grok 模型"
+      "description": "Grok 模型",
+      "_note": "禁用(Cloudflare 人机验证拦截)"
     },
     {
       "id": "cursor",
@@ -453,10 +456,11 @@
       "category": "产品",
       "parser": "browser",
       "url": "https://www.perplexity.ai/hub",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 搜索"
+      "description": "AI 搜索",
+      "_note": "禁用(Cloudflare 人机验证拦截)"
     },
     {
       "id": "suno",
@@ -464,10 +468,11 @@
       "category": "产品",
       "parser": "browser",
       "url": "https://suno.com/blog",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 音乐"
+      "description": "AI 音乐",
+      "_note": "禁用(harness 隐私护栏拦输出(页面含 token 样数据))"
     },
     {
       "id": "runway",
@@ -519,10 +524,11 @@
       "category": "Newsletter",
       "parser": "browser",
       "url": "https://www.deeplearning.ai/the-batch/",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "每周 AI 通讯"
+      "description": "每周 AI 通讯",
+      "_note": "禁用(通用抽取只拿到分类链接,无真文章)"
     },
     {
       "id": "unite-ai",
@@ -530,10 +536,11 @@
       "category": "资讯",
       "parser": "browser",
       "url": "https://www.unite.ai/",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 新闻聚合"
+      "description": "AI 新闻聚合",
+      "_note": "禁用(首页为 best-of SEO 榜单页,非新闻文章)"
     },
     {
       "id": "papers-with-code",
@@ -541,10 +548,11 @@
       "category": "论文",
       "parser": "browser",
       "url": "https://paperswithcode.com/",
-      "enabled": true,
+      "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "论文+代码+排行"
+      "description": "论文+代码+排行",
+      "_note": "禁用(已重定向到 huggingface.co/papers,与 hf-weekly-papers 重复)"
     }
   ]
 }
