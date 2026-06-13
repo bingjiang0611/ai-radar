@@ -61,7 +61,8 @@
       "parser": "xiaoyuzhou",
       "url": "https://www.xiaoyuzhoufm.com/podcast/648b0b641c48983391a63f98",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "open": "link"
     },
     {
       "id": "xyz-zhangxiaojun",
@@ -70,7 +71,8 @@
       "parser": "xiaoyuzhou",
       "url": "https://www.xiaoyuzhoufm.com/podcast/626b46ea9cbbf0451cf5a962",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "open": "link"
     },
     {
       "id": "hf-weekly-papers",

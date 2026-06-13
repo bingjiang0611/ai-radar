@@ -12,6 +12,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import content                                         # noqa: E402
+import render                                           # noqa: E402
 from fetch import normalize_url, resolve_url           # noqa: E402
 from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
 from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
@@ -175,6 +176,25 @@ class TestRetention(unittest.TestCase):
         self.assertEqual(purge_old(30, self.conn), 1)
         rows = all_items(self.conn)
         self.assertEqual([r["title"] for r in rows], ["new"])
+
+
+class TestRender(unittest.TestCase):
+    def test_card_detail_links_to_page(self):
+        card = render._card({"hash": "h1", "title": "T", "source_id": "s", "category": "Newsletter"}, "detail")
+        self.assertIn('href="/item/h1.html"', card)
+        self.assertNotIn("target=", card)
+
+    def test_card_link_goes_external(self):
+        card = render._card({"hash": "h1", "title": "T", "url": "https://e.com/x", "category": "播客"}, "link")
+        self.assertIn('href="https://e.com/x"', card)
+        self.assertIn('target="_blank"', card)
+        self.assertNotIn("/item/", card)
+
+    def test_tabs_no_rewrite(self):
+        panel = render._tabs({"content_html": "<p>x</p>"})
+        self.assertNotIn("乔木风格重写", panel)
+        self.assertIn("原文", panel)
+        self.assertIn("中文翻译", panel)
 
 
 class TestDedup(unittest.TestCase):

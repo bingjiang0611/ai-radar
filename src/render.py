@@ -9,6 +9,7 @@
 """
 
 import html
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -136,14 +137,22 @@ def _head(title):
 
 # ---------- 首页卡片 ----------
 
-def _card(item):
+def _card(item, mode="detail"):
     title = item.get("title_zh") or item.get("title") or ""
     summary = item.get("summary_zh") or item.get("summary") or ""
     cat = item.get("category") or ""
     chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
     src = item.get("source_label", "")
     when = item.get("published_at") or _day(item)
-    detail = f"/item/{_e(item.get('hash',''))}.html"
+    # open=link：标题直跳原链；open=detail：进站内详情页
+    if mode == "link":
+        href = _safe_url(item.get("url", ""))
+        link_attrs = ' target="_blank" rel="noopener"'
+        arrow = ' <span class="text-zinc-300">↗</span>'
+    else:
+        href = f"/item/{_e(item.get('hash',''))}.html"
+        link_attrs = ""
+        arrow = ""
     search_blob = _e(f"{title} {summary} {src}".lower())
     summary_html = (
         f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(summary)}</p>'
@@ -156,7 +165,7 @@ def _card(item):
           <span class="text-zinc-300">·</span>
           <span class="text-zinc-400">{_e(when)}</span>
         </div>
-        <a href="{detail}" class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">{_e(title)}</a>
+        <a href="{href}"{link_attrs} class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">{_e(title)}{arrow}</a>
         {summary_html}
       </article>"""
 
@@ -168,7 +177,7 @@ def _category_tabs(categories):
     return "\n          ".join(btns)
 
 
-def _render_index(items, out):
+def _render_index(items, out, interactions):
     categories = sorted({i.get("category", "") for i in items if i.get("category")})
     sections, cur_day, buf = [], None, []
     for it in items:
@@ -177,7 +186,7 @@ def _render_index(items, out):
             if buf:
                 sections.append((cur_day, buf))
             cur_day, buf = d, []
-        buf.append(_card(it))
+        buf.append(_card(it, interactions.get(it.get("source_id"), "detail")))
     if buf:
         sections.append((cur_day, buf))
 
@@ -238,11 +247,9 @@ def _tabs(item):
     return f"""      <div class="mt-5 inline-flex gap-1 rounded-lg bg-zinc-100 p-1">
         {tab("p-yuanwen", "原文", True)}
         {tab("p-zh", "中文翻译", False)}
-        {tab("p-rewrite", "乔木风格重写", False)}
       </div>
       <div id="p-yuanwen" class="tab-panel doc mt-5">{yuanwen}</div>
-      <div id="p-zh" class="tab-panel mt-5 hidden">{zh_panel}</div>
-      <div id="p-rewrite" class="tab-panel mt-5 hidden"><p class="text-zinc-400">未生成。</p></div>"""
+      <div id="p-zh" class="tab-panel mt-5 hidden">{zh_panel}</div>"""
 
 
 def _render_detail(item, out):
@@ -289,11 +296,15 @@ def _render_detail(item, out):
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
-def render_site(items, out_dir=None):
+def render_site(items, interactions=None, out_dir=None):
+    """interactions: {source_id: 'detail'|'link'}。link 模式的源卡片直跳原链、不生成详情页。"""
+    interactions = interactions or {}
     out = Path(out_dir) if out_dir else DIST
+    # 清掉旧详情页，避免改成 link 模式 / 被 retention 删掉的条目残留页面
+    shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
-    _render_index(items, out)
+    _render_index(items, out, interactions)
     for it in items:
-        if it.get("hash"):
+        if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":
             _render_detail(it, out)
     return out / "index.html"

@@ -41,12 +41,14 @@ def fetch_all():
         except Exception as e:  # noqa: BLE001 — 单源失败不中断整轮
             print(f"  ✗ {s['source_label']}: {e}", file=sys.stderr)
             continue
+        # link 模式的源（如播客）卡片直跳原链、无详情页，不必处理正文
+        mode = s.get("open", "detail")
         # 只对新条目做昂贵的内容处理（清洗 + 图片下载进站）
         new_rows = []
         for r in rows:
             if hash_exists(url_hash(r["url"])):
                 continue
-            r["content_html"] = content.process(r.get("content", "") or "")
+            r["content_html"] = content.process(r.get("content", "") or "") if mode != "link" else ""
             new_rows.append(r)
         n = insert_items(new_rows, s)
         total_new += n
@@ -66,7 +68,8 @@ def main():
         print(f"🧹 retention：清掉 {purged} 条过期条目、{removed_imgs} 张无引用图片")
 
     if "--no-render" not in sys.argv:
-        out = render_site(items)
+        interactions = {s["id"]: s.get("open", "detail") for s in load_sources()}
+        out = render_site(items, interactions)
         print(f"🖼  已渲染 → {out}（{len(items)} 条）")
 
 
