@@ -393,28 +393,6 @@
       "description": "Anthropic 产品与公告"
     },
     {
-      "id": "x-list-ai",
-      "source_label": "X · AI 列表",
-      "category": "推文",
-      "parser": "browser",
-      "url": "https://x.com/i/lists/1597115448146898944",
-      "enabled": true,
-      "limit": 8,
-      "open": "link",
-      "description": "X AI 列表精选"
-    },
-    {
-      "id": "x-list-following",
-      "source_label": "X · 我的 AI 关注",
-      "category": "推文",
-      "parser": "browser",
-      "url": "https://x.com/i/lists/2056920461594837041",
-      "enabled": true,
-      "limit": 8,
-      "open": "link",
-      "description": "我关注的 AI 账号"
-    },
-    {
       "id": "meta-ai",
       "source_label": "Meta AI",
       "category": "研究",
