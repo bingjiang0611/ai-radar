@@ -1,0 +1,3 @@
+# 唯一运行依赖：HTML 清洗（防 XSS，渲染外站正文用）。
+# 安装：python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+nh3>=0.2

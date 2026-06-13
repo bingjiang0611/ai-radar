@@ -1,9 +1,11 @@
-"""纯 Python 渲染静态站 → dist/index.html。
+"""纯 Python 渲染静态站。
 
-无模板引擎、无构建链。所有来自外站的字符串渲染前过 html.escape；href 只允许 http(s)。
-布局：顶部分类 tab + 搜索；左侧来源栏（按当前分类动态算来源 + 计数，点击二级筛选，
-窄屏收成顶部横向胶囊条）；右侧全量 feed，按天分段，每条带分类色块 + 来源徽章 + 链回原文。
-分类/来源/搜索三重过滤都是 client-side（规模小到不需要单独的 search.json）。
+产物：
+- dist/index.html        全量 feed（分类 tab + 左侧来源栏 + 搜索；卡片点击进站内详情页）
+- dist/item/<hash>.html  条目详情页（站内展示正文，"打开原文"才外跳；原文/中文翻译/乔木重写 tabs）
+- dist/img/<hash>.<ext>  下载进站的图片（由 content.localize_images 写入，此处不动）
+
+外站正文已在入库前用 nh3 清洗 + 图片进站，这里直接渲染；标题/来源等短文本仍过 html.escape。
 """
 
 import html
@@ -12,7 +14,6 @@ from pathlib import Path
 
 DIST = Path(__file__).resolve().parent.parent / "dist"
 
-# 媒介分类 → chip 配色（Tailwind 类）
 _CAT_COLORS = {
     "论文": "bg-violet-100 text-violet-700",
     "研究": "bg-blue-100 text-blue-700",
@@ -24,35 +25,44 @@ _CAT_COLORS = {
 }
 _CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
 
-# client-side 三重过滤（分类 tab + 来源栏 + 搜索）。
-# 来源列表按当前分类动态重算计数，单一真源 = 渲染出来的 .item DOM。
-# 来源按钮用 createElement + textContent 构建（不用 innerHTML，避免来源名注入）。
-_SCRIPT = """
+# 详情页正文样式（Tailwind CDN 不含 typography 插件，手写关键排版）
+_CONTENT_STYLE = """
+<style>
+  .doc img{max-width:100%;height:auto;border-radius:.5rem;margin:1rem 0}
+  .doc p{margin:.85rem 0;line-height:1.75}
+  .doc h1,.doc h2,.doc h3,.doc h4{font-weight:600;margin:1.5rem 0 .5rem;line-height:1.3}
+  .doc a{color:#2563eb;text-decoration:underline}
+  .doc ul,.doc ol{margin:.85rem 0;padding-left:1.5rem;list-style:revert}
+  .doc li{margin:.3rem 0}
+  .doc blockquote{border-left:3px solid #e4e4e7;padding-left:1rem;color:#71717a;margin:1rem 0}
+  .doc pre{background:#f4f4f5;padding:1rem;border-radius:.5rem;overflow-x:auto;font-size:.85em;margin:1rem 0}
+  .doc code{background:#f4f4f5;padding:.1rem .3rem;border-radius:.25rem;font-size:.9em}
+  .doc pre code{background:none;padding:0}
+  .doc figure{margin:1rem 0}
+</style>
+"""
+
+# 首页 client-side 三重过滤（分类 tab + 来源栏 + 搜索）
+_INDEX_SCRIPT = """
 <script>
   const items = [...document.querySelectorAll('.item')];
   const searchEl = document.getElementById('search');
   const sourcesEl = document.getElementById('sources');
   let activeCat = '', activeSource = '';
-
   const inCat = el => !activeCat || el.dataset.category === activeCat;
 
   function makeSourceBtn(label, count, src) {
     const b = document.createElement('button');
     b.className = 'src-btn flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm md:w-full md:justify-between md:rounded-md md:py-1.5';
     b.dataset.src = src;
-    const name = document.createElement('span');
-    name.className = 'truncate';
-    name.textContent = label;
-    const cnt = document.createElement('span');
-    cnt.className = 'text-xs text-zinc-400';
-    cnt.textContent = count;
+    const name = document.createElement('span'); name.className = 'truncate'; name.textContent = label;
+    const cnt = document.createElement('span'); cnt.className = 'text-xs text-zinc-400'; cnt.textContent = count;
     b.append(name, cnt);
-    if (src === activeSource) b.classList.add('bg-zinc-100', 'font-medium', 'text-zinc-900');
-    else b.classList.add('text-zinc-500');
+    b.classList.add(src === activeSource ? 'bg-zinc-100' : 'text-zinc-500');
+    if (src === activeSource) b.classList.add('font-medium', 'text-zinc-900');
     b.addEventListener('click', () => { activeSource = src; buildSources(); apply(); });
     return b;
   }
-
   function buildSources() {
     const counts = new Map();
     items.forEach(el => { if (inCat(el)) counts.set(el.dataset.source, (counts.get(el.dataset.source) || 0) + 1); });
@@ -62,13 +72,10 @@ _SCRIPT = """
     sourcesEl.appendChild(makeSourceBtn('全部', total, ''));
     entries.forEach(([src, c]) => sourcesEl.appendChild(makeSourceBtn(src, c, src)));
   }
-
   function apply() {
     const q = searchEl.value.trim().toLowerCase();
     items.forEach(el => {
-      const ok = inCat(el)
-        && (!activeSource || el.dataset.source === activeSource)
-        && (!q || el.dataset.text.includes(q));
+      const ok = inCat(el) && (!activeSource || el.dataset.source === activeSource) && (!q || el.dataset.text.includes(q));
       el.style.display = ok ? '' : 'none';
     });
     document.querySelectorAll('.day-section').forEach(sec => {
@@ -76,21 +83,30 @@ _SCRIPT = """
       sec.style.display = any ? '' : 'none';
     });
   }
-
   document.querySelectorAll('.cat-btn').forEach(btn => btn.addEventListener('click', () => {
-    activeCat = btn.dataset.cat;
-    activeSource = '';  // 切分类时重置来源筛选
-    document.querySelectorAll('.cat-btn').forEach(b => {
-      const on = (b === btn);
-      b.classList.toggle('bg-zinc-800', on);
-      b.classList.toggle('text-white', on);
-    });
-    buildSources();
-    apply();
+    activeCat = btn.dataset.cat; activeSource = '';
+    document.querySelectorAll('.cat-btn').forEach(b => { const on = (b === btn); b.classList.toggle('bg-zinc-800', on); b.classList.toggle('text-white', on); });
+    buildSources(); apply();
   }));
   searchEl.addEventListener('input', apply);
-  buildSources();
-  apply();
+  buildSources(); apply();
+</script>
+"""
+
+# 详情页 tab 切换 + 复制链接
+_DETAIL_SCRIPT = """
+<script>
+  document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('bg-white', x === b));
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.toggle('shadow-sm', x === b));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.id !== b.dataset.panel));
+  }));
+  const copyBtn = document.getElementById('copy-link');
+  if (copyBtn) copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(copyBtn.dataset.url).then(() => {
+      copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制链接'; }, 1500);
+    });
+  });
 </script>
 """
 
@@ -108,6 +124,18 @@ def _day(item):
     return (item.get("fetched_at") or "")[:10] or "未知日期"
 
 
+def _head(title):
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{_e(title)}</title>
+  <script src="https://cdn.tailwindcss.com"></script>"""
+
+
+# ---------- 首页卡片 ----------
+
 def _card(item):
     title = item.get("title_zh") or item.get("title") or ""
     summary = item.get("summary_zh") or item.get("summary") or ""
@@ -115,6 +143,7 @@ def _card(item):
     chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
     src = item.get("source_label", "")
     when = item.get("published_at") or _day(item)
+    detail = f"/item/{_e(item.get('hash',''))}.html"
     search_blob = _e(f"{title} {summary} {src}".lower())
     summary_html = (
         f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(summary)}</p>'
@@ -127,10 +156,7 @@ def _card(item):
           <span class="text-zinc-300">·</span>
           <span class="text-zinc-400">{_e(when)}</span>
         </div>
-        <a href="{_e(_safe_url(item.get('url','')))}" target="_blank" rel="noopener"
-           class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">
-          {_e(title)} <span class="text-zinc-300">↗</span>
-        </a>
+        <a href="{detail}" class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">{_e(title)}</a>
         {summary_html}
       </article>"""
 
@@ -142,13 +168,8 @@ def _category_tabs(categories):
     return "\n          ".join(btns)
 
 
-def render_site(items, out_dir=None):
-    out = Path(out_dir) if out_dir else DIST
-    out.mkdir(parents=True, exist_ok=True)
-
+def _render_index(items, out):
     categories = sorted({i.get("category", "") for i in items if i.get("category")})
-
-    # 按天分段（items 已是最新在前）
     sections, cur_day, buf = [], None, []
     for it in items:
         d = _day(it)
@@ -165,19 +186,12 @@ def render_site(items, out_dir=None):
         body.append(
             f'      <section class="day-section">\n'
             f'        <h2 class="py-2 text-sm font-semibold text-zinc-400">{_e(day)}</h2>\n'
-            + "\n".join(cards)
-            + "\n      </section>"
+            + "\n".join(cards) + "\n      </section>"
         )
-    body_html = "\n".join(body) if body else '<p class="py-16 text-center text-zinc-400">暂无内容，跑一次 <code>python3 src/run.py</code> 抓取。</p>'
-
+    body_html = "\n".join(body) if body else '<p class="py-16 text-center text-zinc-400">暂无内容。</p>'
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    page = f"""<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Radar</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+
+    page = f"""{_head("AI Radar")}
 </head>
 <body class="bg-zinc-50 text-zinc-800 antialiased">
   <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
@@ -202,10 +216,84 @@ def render_site(items, out_dir=None):
       <p class="py-8 text-center text-xs text-zinc-300">共 {len(items)} 条 · 生成于 {generated}</p>
     </main>
   </div>
-{_SCRIPT}
+{_INDEX_SCRIPT}
 </body>
 </html>
 """
-    index = out / "index.html"
-    index.write_text(page, encoding="utf-8")
-    return index
+    (out / "index.html").write_text(page, encoding="utf-8")
+
+
+# ---------- 详情页 ----------
+
+def _tabs(item):
+    content = item.get("content_html") or ""
+    yuanwen = content or '<p class="text-zinc-400">本条无正文，点上方「打开原文」查看。</p>'
+    zh = item.get("translation_md") or ""
+    zh_panel = (f'<div class="doc">{_e(zh)}</div>' if zh
+                else '<p class="text-zinc-400">未翻译。挑中该条后会补中文全文。</p>')
+    tab = lambda pid, label, active: (  # noqa: E731
+        f'<button class="tab-btn rounded-md px-4 py-1.5 text-sm font-medium '
+        f'{"bg-white shadow-sm" if active else "text-zinc-500"}" data-panel="{pid}">{label}</button>'
+    )
+    return f"""      <div class="mt-5 inline-flex gap-1 rounded-lg bg-zinc-100 p-1">
+        {tab("p-yuanwen", "原文", True)}
+        {tab("p-zh", "中文翻译", False)}
+        {tab("p-rewrite", "乔木风格重写", False)}
+      </div>
+      <div id="p-yuanwen" class="tab-panel doc mt-5">{yuanwen}</div>
+      <div id="p-zh" class="tab-panel mt-5 hidden">{zh_panel}</div>
+      <div id="p-rewrite" class="tab-panel mt-5 hidden"><p class="text-zinc-400">未生成。</p></div>"""
+
+
+def _render_detail(item, out):
+    title_zh = item.get("title_zh") or ""
+    title = item.get("title") or ""
+    head_title = title_zh or title
+    subtitle = (f'<p class="mt-1 text-lg text-zinc-400">{_e(title)}</p>'
+                if title_zh and title and title_zh != title else "")
+    cat = item.get("category") or ""
+    chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
+    url = _safe_url(item.get("url", ""))
+    when = item.get("published_at") or _day(item)
+
+    page = f"""{_head(head_title)}
+{_CONTENT_STYLE}
+</head>
+<body class="bg-zinc-50 text-zinc-800 antialiased">
+  <header class="border-b border-zinc-200 bg-white">
+    <div class="mx-auto max-w-2xl px-4 py-2.5">
+      <a href="/" class="text-sm font-bold tracking-tight hover:text-blue-600">← AI&nbsp;Radar</a>
+    </div>
+  </header>
+  <main class="mx-auto max-w-2xl px-4 py-6">
+    <div class="flex items-center gap-2 text-xs">
+      <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
+      <span class="font-mono text-zinc-400">{_e(item.get('source_label',''))}</span>
+      <span class="text-zinc-300">·</span>
+      <span class="text-zinc-400">{_e(when)}</span>
+    </div>
+    <h1 class="mt-2 text-2xl font-bold leading-snug">{_e(head_title)}</h1>
+    {subtitle}
+    <div class="mt-4 flex flex-wrap gap-2">
+      <a href="{url}" target="_blank" rel="noopener"
+         class="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium hover:border-blue-400 hover:text-blue-600">↗ 打开原文</a>
+      <button id="copy-link" data-url="{_e(item.get('url',''))}"
+              class="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium hover:border-blue-400 hover:text-blue-600">复制链接</button>
+    </div>
+{_tabs(item)}
+  </main>
+{_DETAIL_SCRIPT}
+</body>
+</html>
+"""
+    (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
+
+
+def render_site(items, out_dir=None):
+    out = Path(out_dir) if out_dir else DIST
+    (out / "item").mkdir(parents=True, exist_ok=True)
+    _render_index(items, out)
+    for it in items:
+        if it.get("hash"):
+            _render_detail(it, out)
+    return out / "index.html"

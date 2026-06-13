@@ -6,7 +6,7 @@
 
 import hashlib
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fetch import normalize_url
@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS items (
   published_at  TEXT DEFAULT '',
   fetched_at    TEXT NOT NULL,
   status        TEXT DEFAULT 'new',
+  content_html  TEXT DEFAULT '',
   translation_md TEXT DEFAULT '',
   video_url     TEXT DEFAULT ''
 );
@@ -55,8 +56,19 @@ def url_hash(url):
     return hashlib.md5(normalize_url(url).encode("utf-8")).hexdigest()[:16]
 
 
+def hash_exists(hash_val, conn=None):
+    """该 hash 是否已入库（用于只对新条目做昂贵的内容处理/图片下载）。"""
+    c = conn or _conn()
+    init_db(c)
+    row = c.execute("SELECT 1 FROM items WHERE hash = ?", (hash_val,)).fetchone()
+    if conn is None:
+        c.close()
+    return row is not None
+
+
 def insert_items(rows, source, conn=None):
-    """把 parser 输出写库；hash 撞了自动跳过。返回去重后实际新增条数。"""
+    """把 parser 输出写库；hash 撞了自动跳过。返回去重后实际新增条数。
+    row 可带 content_html（已清洗+图片进站的正文）。"""
     c = conn or _conn()
     init_db(c)
     now = datetime.now(timezone.utc).isoformat()
@@ -64,10 +76,11 @@ def insert_items(rows, source, conn=None):
     for r in rows:
         cur = c.execute(
             """INSERT OR IGNORE INTO items
-               (hash, source_id, source_label, category, title, summary, url, published_at, fetched_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+               (hash, source_id, source_label, category, title, summary, content_html, url, published_at, fetched_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (url_hash(r["url"]), source["id"], source["source_label"], source["category"],
-             r["title"], r.get("summary", ""), r["url"], r.get("published_at", ""), now),
+             r["title"], r.get("summary", ""), r.get("content_html", ""),
+             r["url"], r.get("published_at", ""), now),
         )
         if cur.rowcount > 0:
             inserted += 1
@@ -75,6 +88,19 @@ def insert_items(rows, source, conn=None):
     if conn is None:
         c.close()
     return inserted
+
+
+def purge_old(days=30, conn=None):
+    """删除 fetched_at 早于 days 天前的条目（1 个月 retention，每次抓取顺带清）。返回删除数。"""
+    c = conn or _conn()
+    init_db(c)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cur = c.execute("DELETE FROM items WHERE fetched_at < ?", (cutoff,))
+    c.commit()
+    deleted = cur.rowcount
+    if conn is None:
+        c.close()
+    return deleted
 
 
 def all_items(conn=None):

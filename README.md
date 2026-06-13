@@ -2,18 +2,24 @@
 
 个人 AI 资讯聚合站。本地抓多个 AI 信息源 → 去重 → 渲染成静态网站 → 部署到 Cloudflare Pages，无登录分享给几个同事。挑中的条目可补中文全文翻译 / B 站视频链接，长在同一个站。
 
+## 安装
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # 唯一依赖：nh3（HTML 清洗）
+```
+
 ## 用法
 
 ```bash
-python3 src/run.py                     # 抓全部启用源 → 去重写库 → 渲染 dist/
-python3 -m unittest discover -s tests  # 测试
-# 本地预览
-python3 -m http.server -d dist 8787    # → http://localhost:8787
-# 部署（需先 wrangler 登录）
-wrangler pages deploy ./dist
+.venv/bin/python src/run.py                       # 抓 → 去重 → 清洗+图片进站 → retention → 渲染 dist/
+.venv/bin/python -m unittest discover -s tests    # 测试
+python3 -m http.server -d dist 8787               # 本地预览 → http://localhost:8787
+wrangler pages deploy ./dist                      # 部署（需先 wrangler 登录）
 ```
 
-纯 Python 标准库，无 pip 依赖、无构建链。需要 `python3` 和 `curl`（macOS 自带）。
+需要 `python3` + `curl`（macOS 自带）+ `nh3`（唯一 pip 依赖，安全清洗外站正文）。
+- 正文：feed 自带全文（清洗后站内展示），图片下载进 `dist/img/`（防丢失），点「打开原文」才外跳。
+- retention：只保留近 30 天条目，每次抓取顺带清理过期条目和无引用图片。
 
 ## 加信息源
 

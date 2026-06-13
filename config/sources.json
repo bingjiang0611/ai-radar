@@ -84,7 +84,8 @@
         "items_path": "",
         "title": "paper.title",
         "url_template": "https://huggingface.co/papers/{paper.id}",
-        "summary_template": "{paper.upvotes} upvotes"
+        "summary_template": "{paper.upvotes} upvotes",
+        "content": "paper.summary"
       },
       "_note": "?week={week} 自动取当前 ISO 周(由 resolve_url 替换),返回该周 upvotes top 50;每日榜用 https://huggingface.co/api/daily_papers"
     },

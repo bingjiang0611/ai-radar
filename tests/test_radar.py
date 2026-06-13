@@ -5,13 +5,16 @@ import re
 import sqlite3
 import sys
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from fetch import normalize_url, resolve_url          # noqa: E402
+import content                                         # noqa: E402
+from fetch import normalize_url, resolve_url           # noqa: E402
 from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
-from store import init_db, insert_items, all_items, url_hash  # noqa: E402
+from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
 
 RSS_FIXTURE = """<?xml version="1.0"?>
 <rss version="2.0"><channel>
@@ -79,6 +82,7 @@ class TestRss(unittest.TestCase):
         self.assertEqual(items[0]["title"], "First Post")
         self.assertEqual(items[0]["url"], "https://example.com/a?utm_source=x")
         self.assertEqual(items[0]["summary"], "Hello world")  # HTML 标签已去除
+        self.assertIn("Hello", items[0]["content"])           # content 保留原始正文
 
     def test_atom_link_href(self):
         items = parse_rss_text(ATOM_FIXTURE)
@@ -125,6 +129,52 @@ class TestXiaoyuzhou(unittest.TestCase):
 
     def test_no_next_data_returns_empty(self):
         self.assertEqual(parse_xiaoyuzhou_text("<html>nope</html>"), [])
+
+
+class TestContent(unittest.TestCase):
+    def test_sanitize_keeps_img_strips_script(self):
+        out = content.sanitize('<p>x</p><img src="https://a/b.png"><script>bad()</script>')
+        self.assertIn("<img", out)
+        self.assertNotIn("<script", out)
+
+    def test_localize_rewrites_http_src(self):
+        with mock.patch.object(content, "_download_image", return_value="/img/deadbeef.png"):
+            out = content.localize_images('<img src="https://a/b.png" alt="x">')
+        self.assertIn('src="/img/deadbeef.png"', out)
+        self.assertNotIn("https://a/b.png", out)
+
+    def test_localize_leaves_relative_src(self):
+        html_in = '<img src="/local.png">'
+        self.assertEqual(content.localize_images(html_in), html_in)
+
+
+class TestRetention(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        init_db(self.conn)
+        self.source = {"id": "s", "source_label": "S", "category": "Newsletter"}
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_hash_exists(self):
+        insert_items([{"url": "https://e.com/x", "title": "x"}], self.source, self.conn)
+        self.assertTrue(hash_exists(url_hash("https://e.com/x"), self.conn))
+        self.assertFalse(hash_exists(url_hash("https://e.com/y"), self.conn))
+
+    def test_purge_old_keeps_recent(self):
+        insert_items([{"url": "https://e.com/new", "title": "new"}], self.source, self.conn)
+        old = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+        self.conn.execute(
+            "INSERT INTO items (hash,source_id,source_label,category,title,url,fetched_at) VALUES (?,?,?,?,?,?,?)",
+            ("oldhash", "s", "S", "Newsletter", "old", "https://e.com/old", old),
+        )
+        self.conn.commit()
+        self.assertEqual(len(all_items(self.conn)), 2)
+        self.assertEqual(purge_old(30, self.conn), 1)
+        rows = all_items(self.conn)
+        self.assertEqual([r["title"] for r in rows], ["new"])
 
 
 class TestDedup(unittest.TestCase):

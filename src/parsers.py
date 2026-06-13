@@ -50,10 +50,12 @@ def parse_rss_text(xml, limit=10):
         if not url:
             url = (node.findtext("id") or "").strip()  # Atom id 兜底
 
-        summary = (
-            node.findtext("description")
-            or node.findtext("summary")
+        # 全文优先 content:encoded（RSS）/ content（Atom），退到 summary/description
+        content_raw = (
+            node.findtext("encoded")
             or node.findtext("content")
+            or node.findtext("summary")
+            or node.findtext("description")
             or ""
         )
         published = (
@@ -67,7 +69,8 @@ def parse_rss_text(xml, limit=10):
             out.append({
                 "title": title,
                 "url": url,
-                "summary": _clean(summary),
+                "summary": _clean(content_raw, 200),
+                "content": content_raw,
                 "published_at": published,
             })
     return out
@@ -122,6 +125,7 @@ def parse_json_text(raw, cfg, limit=15):
             url = None
         summary = _fmt(cfg["summary_template"], it) if cfg.get("summary_template") else ""
 
+        content = _dotted(it, cfg["content"]) if cfg.get("content") else ""
         title = str(title).strip() if title else ""
         url = str(url).strip() if url else ""
         if title and url:
@@ -129,6 +133,7 @@ def parse_json_text(raw, cfg, limit=15):
                 "title": title,
                 "url": url,
                 "summary": _clean(summary),
+                "content": str(content) if content else "",
                 "published_at": "",
             })
     return out
@@ -158,10 +163,12 @@ def parse_xiaoyuzhou_text(html_text, limit=15):
         title = (ep.get("title") or "").strip()
         if not eid or not title:
             continue
+        content_raw = ep.get("shownotes") or ep.get("description") or ""
         out.append({
             "title": title,
             "url": f"https://www.xiaoyuzhoufm.com/episode/{eid}",
             "summary": _clean(ep.get("description") or ep.get("shownotes") or ""),
+            "content": content_raw,
             "published_at": (ep.get("pubDate") or "")[:10],  # ISO → 日期
         })
     return out
