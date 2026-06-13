@@ -1,5 +1,6 @@
 """ai-radar 单测：URL 归一化 / 去重 / RSS·Atom 解析 / JSON 解析。零网络。"""
 
+import json
 import sqlite3
 import sys
 import unittest
@@ -8,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from fetch import normalize_url                       # noqa: E402
-from parsers import parse_rss_text, parse_json_text   # noqa: E402
+from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
 from store import init_db, insert_items, all_items, url_hash  # noqa: E402
 
 RSS_FIXTURE = """<?xml version="1.0"?>
@@ -90,6 +91,28 @@ class TestJson(unittest.TestCase):
 
     def test_malformed_json_returns_empty(self):
         self.assertEqual(parse_json_text("{bad", HF_CFG), [])
+
+
+class TestXiaoyuzhou(unittest.TestCase):
+    def _html(self, podcast):
+        return ('<html><body><script id="__NEXT_DATA__" type="application/json">'
+                + json.dumps({"props": {"pageProps": {"podcast": podcast}}})
+                + "</script></body></html>")
+
+    def test_episodes_to_items(self):
+        html_text = self._html({"title": "测试播客", "episodes": [
+            {"eid": "abc123", "title": "第一集", "description": "<p>内容</p>",
+             "pubDate": "2026-05-23T13:30:00.000Z"},
+        ]})
+        items = parse_xiaoyuzhou_text(html_text)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "第一集")
+        self.assertEqual(items[0]["url"], "https://www.xiaoyuzhoufm.com/episode/abc123")
+        self.assertEqual(items[0]["summary"], "内容")          # HTML 标签已去
+        self.assertEqual(items[0]["published_at"], "2026-05-23")  # ISO → 日期
+
+    def test_no_next_data_returns_empty(self):
+        self.assertEqual(parse_xiaoyuzhou_text("<html>nope</html>"), [])
 
 
 class TestDedup(unittest.TestCase):

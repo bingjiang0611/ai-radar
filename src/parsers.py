@@ -139,7 +139,41 @@ def parse_json_api(source):
     return parse_json_text(raw, source.get("json", {}), source.get("limit", 15)) if raw else []
 
 
+# ---------- 小宇宙播客（Next.js 页面，集数据嵌在 __NEXT_DATA__ JSON 里，无公开 RSS） ----------
+
+def parse_xiaoyuzhou_text(html_text, limit=15):
+    """从小宇宙播客页 HTML 抽 __NEXT_DATA__ → podcast.episodes。纯函数。"""
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html_text, re.S)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return []
+
+    podcast = (data.get("props", {}).get("pageProps", {}) or {}).get("podcast", {}) or {}
+    out = []
+    for ep in (podcast.get("episodes") or [])[:limit]:
+        eid = ep.get("eid")
+        title = (ep.get("title") or "").strip()
+        if not eid or not title:
+            continue
+        out.append({
+            "title": title,
+            "url": f"https://www.xiaoyuzhoufm.com/episode/{eid}",
+            "summary": _clean(ep.get("description") or ep.get("shownotes") or ""),
+            "published_at": (ep.get("pubDate") or "")[:10],  # ISO → 日期
+        })
+    return out
+
+
+def parse_xiaoyuzhou(source):
+    html_text = fetch(source["url"])
+    return parse_xiaoyuzhou_text(html_text, source.get("limit", 15)) if html_text else []
+
+
 PARSERS = {
     "rss": parse_rss,
     "json_api": parse_json_api,
+    "xiaoyuzhou": parse_xiaoyuzhou,
 }

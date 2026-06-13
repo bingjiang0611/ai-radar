@@ -37,11 +37,38 @@
       "limit": 10
     },
     {
+      "id": "bensbites",
+      "source_label": "Ben's Bites",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.bensbites.com/feed",
+      "enabled": true,
+      "limit": 10
+    },
+    {
       "id": "lex-fridman-yt",
       "source_label": "Lex Fridman (YouTube)",
       "category": "视频",
       "parser": "rss",
       "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCSHZKyawb77ixDdsGog4iWA",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "xyz-42zhang",
+      "source_label": "42章经",
+      "category": "播客",
+      "parser": "xiaoyuzhou",
+      "url": "https://www.xiaoyuzhoufm.com/podcast/648b0b641c48983391a63f98",
+      "enabled": true,
+      "limit": 10
+    },
+    {
+      "id": "xyz-zhangxiaojun",
+      "source_label": "张小珺Jùn｜商业访谈录",
+      "category": "播客",
+      "parser": "xiaoyuzhou",
+      "url": "https://www.xiaoyuzhoufm.com/podcast/626b46ea9cbbf0451cf5a962",
       "enabled": true,
       "limit": 10
     },
@@ -65,10 +92,10 @@
       "source_label": "Anthropic",
       "category": "研究",
       "parser": "rss",
-      "url": "https://www.anthropic.com/rss.xml",
+      "url": "https://www.anthropic.com/news",
       "enabled": false,
       "limit": 10,
-      "_note": "Anthropic 是否有公开 RSS 待验证；先 disabled，确认后再开"
+      "_note": "实测无公开 RSS（/rss.xml /feed 均 404），/news 完全客户端渲染、curl 抓不到内容。和 Twitter 同样需 browser-use，留到 browser-use 切片再接"
     }
   ]
 }
