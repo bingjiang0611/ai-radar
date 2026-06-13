@@ -14,6 +14,7 @@ import re
 import shutil
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 # 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
@@ -116,6 +117,9 @@ _INDEX_SCRIPT = """
   }));
   searchEl.addEventListener('input', apply);
   buildSources(); apply();
+  // 来源卡片点击落地：/?source=<label> → 预筛该来源
+  const _src = new URLSearchParams(location.search).get('source');
+  if (_src) { activeSource = _src; buildSources(); apply(); }
 </script>
 """
 
@@ -269,6 +273,7 @@ def _render_index(items, out, interactions, descriptions):
   <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
     <div class="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
       <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
+      <a href="/sources.html" class="text-sm text-zinc-500 hover:text-blue-600">来源</a>
       <input id="search" type="search" placeholder="搜索…"
              class="ml-auto w-44 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
     </div>
@@ -364,6 +369,62 @@ def _render_detail(item, out, descriptions):
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
+def _render_sources(items, descriptions, out):
+    """来源总览页 dist/sources.html：每个来源一张卡片（图标+名称+介绍+最近更新+条数），点击 → /?source=<label> 筛选。"""
+    # items 已按 fetched_at DESC，每个来源首次出现即最新
+    stats = {}
+    for it in items:
+        lbl = it.get("source_label", "")
+        if not lbl:
+            continue
+        s = stats.get(lbl)
+        if s is None:
+            stats[lbl] = {"count": 1, "latest": (it.get("fetched_at") or "")[:10], "category": it.get("category", "")}
+        else:
+            s["count"] += 1
+    rows = sorted(stats.items(), key=lambda kv: (kv[1]["latest"], kv[1]["count"]), reverse=True)
+
+    cards = []
+    for lbl, s in rows:
+        cat = s["category"]
+        chip = _CAT_COLORS.get(cat, _CAT_DEFAULT)
+        icon = _CAT_ICON.get(cat, "")
+        desc = descriptions.get(lbl, "")
+        href = "/?source=" + quote(lbl)
+        desc_html = f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(desc)}</p>' if desc else ""
+        cards.append(
+            f'''      <a href="{_e(href)}" class="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-sm">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="rounded px-1.5 py-0.5 font-medium {chip}">{icon} {_e(cat)}</span>
+          <span class="ml-auto text-zinc-400">{s["count"]} 条</span>
+        </div>
+        <h3 class="mt-2 font-semibold text-zinc-800">{_e(lbl)}</h3>
+        {desc_html}
+        <p class="mt-auto pt-2 text-xs text-zinc-400">最近更新 {_e(s["latest"])}</p>
+      </a>'''
+        )
+    grid = "\n".join(cards) if cards else '<p class="py-16 text-center text-zinc-400">暂无来源。</p>'
+
+    page = f"""{_head("来源 · AI Radar")}
+</head>
+<body class="bg-zinc-50 text-zinc-800 antialiased">
+  <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
+    <div class="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
+      <a href="/" class="text-lg font-bold tracking-tight hover:text-blue-600">← AI&nbsp;Radar</a>
+      <span class="text-sm text-zinc-400">来源总览 · {len(rows)} 个</span>
+    </div>
+  </header>
+  <main class="mx-auto max-w-5xl px-4 py-6">
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+{grid}
+    </div>
+  </main>
+</body>
+</html>
+"""
+    (out / "sources.html").write_text(page, encoding="utf-8")
+
+
 def render_site(items, interactions=None, descriptions=None, out_dir=None):
     """interactions: {source_id: 'detail'|'link'}；descriptions: {source_label: 说明}。
     link 模式的源卡片直跳原链、不生成详情页。"""
@@ -374,6 +435,7 @@ def render_site(items, interactions=None, descriptions=None, out_dir=None):
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
     _render_index(items, out, interactions, descriptions)
+    _render_sources(items, descriptions, out)
     for it in items:
         if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":
             _render_detail(it, out, descriptions)
