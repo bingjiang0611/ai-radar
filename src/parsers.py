@@ -28,12 +28,17 @@ def _strip_ns(root):
     return root
 
 
+def _fix_amp(xml):
+    """修裸 & （部分 feed 如 Apple ML 不转义 &），否则 ET 会整篇解析失败。"""
+    return re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)", "&amp;", xml)
+
+
 # ---------- RSS / Atom ----------
 
 def parse_rss_text(xml, limit=10):
     """解析 RSS 2.0 (<item>) 或 Atom (<entry>，YouTube 用)。纯函数。"""
     try:
-        root = _strip_ns(ET.fromstring(xml))
+        root = _strip_ns(ET.fromstring(_fix_amp(xml)))
     except ET.ParseError:
         return []
 

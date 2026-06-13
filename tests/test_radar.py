@@ -97,6 +97,15 @@ class TestRss(unittest.TestCase):
     def test_malformed_xml_returns_empty(self):
         self.assertEqual(parse_rss_text("<not xml"), [])
 
+    def test_bare_ampersand_recovered(self):
+        # 部分 feed（如 Apple ML）正文有裸 &，不应导致整篇解析失败
+        xml = ('<rss version="2.0"><channel><item>'
+               '<title>Tom & Jerry & AI</title><link>https://e.com/a</link>'
+               '</item></channel></rss>')
+        items = parse_rss_text(xml)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Tom & Jerry & AI")
+
 
 class TestJson(unittest.TestCase):
     def test_dotted_path_and_url_template(self):

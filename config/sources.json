@@ -7,7 +7,8 @@
       "parser": "rss",
       "url": "https://importai.substack.com/feed",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "Jack Clark 的 AI 政策与前沿通讯"
     },
     {
       "id": "interconnects",
@@ -16,7 +17,8 @@
       "parser": "rss",
       "url": "https://www.interconnects.ai/feed",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "Nathan Lambert 的模型训练/RL 研究"
     },
     {
       "id": "nlp-newsletter",
@@ -25,7 +27,8 @@
       "parser": "rss",
       "url": "https://nlp.elvissaravia.com/feed",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "Elvis Saravia 的 NLP/LLM 通讯"
     },
     {
       "id": "latent-space",
@@ -34,7 +37,8 @@
       "parser": "rss",
       "url": "https://www.latent.space/feed",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "AI 工程实践通讯"
     },
     {
       "id": "bensbites",
@@ -43,7 +47,8 @@
       "parser": "rss",
       "url": "https://www.bensbites.com/feed",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "AI 每日资讯精选"
     },
     {
       "id": "lex-fridman-yt",
@@ -52,7 +57,8 @@
       "parser": "rss",
       "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCSHZKyawb77ixDdsGog4iWA",
       "enabled": true,
-      "limit": 10
+      "limit": 10,
+      "description": "Lex Fridman 长访谈（视频）"
     },
     {
       "id": "xyz-42zhang",
@@ -62,7 +68,8 @@
       "url": "https://www.xiaoyuzhoufm.com/podcast/648b0b641c48983391a63f98",
       "enabled": true,
       "limit": 10,
-      "open": "link"
+      "open": "link",
+      "description": "42章经：AI 与创投对谈"
     },
     {
       "id": "xyz-zhangxiaojun",
@@ -72,7 +79,8 @@
       "url": "https://www.xiaoyuzhoufm.com/podcast/626b46ea9cbbf0451cf5a962",
       "enabled": true,
       "limit": 10,
-      "open": "link"
+      "open": "link",
+      "description": "张小珺：商业访谈录"
     },
     {
       "id": "hf-weekly-papers",
@@ -89,7 +97,8 @@
         "summary_template": "{paper.upvotes} upvotes",
         "content": "paper.summary"
       },
-      "_note": "?week={week} 自动取当前 ISO 周(由 resolve_url 替换),返回该周 upvotes top 50;每日榜用 https://huggingface.co/api/daily_papers"
+      "_note": "?week={week} 自动取当前 ISO 周(由 resolve_url 替换),返回该周 upvotes top 50;每日榜用 https://huggingface.co/api/daily_papers",
+      "description": "Hugging Face 社区本周热门论文"
     },
     {
       "id": "anthropic-news",
@@ -99,7 +108,278 @@
       "url": "https://www.anthropic.com/news",
       "enabled": false,
       "limit": 10,
-      "_note": "实测无公开 RSS（/rss.xml /feed 均 404），/news 完全客户端渲染、curl 抓不到内容。和 Twitter 同样需 browser-use，留到 browser-use 切片再接"
+      "_note": "实测无公开 RSS（/rss.xml /feed 均 404），/news 完全客户端渲染、curl 抓不到内容。和 Twitter 同样需 browser-use，留到 browser-use 切片再接",
+      "description": "Claude 研究（无 RSS，待 browser-use）"
+    },
+    {
+      "id": "google-deepmind",
+      "source_label": "Google DeepMind",
+      "category": "研究",
+      "parser": "rss",
+      "url": "https://deepmind.google/blog/rss.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "Gemini、AlphaFold 等前沿研究"
+    },
+    {
+      "id": "google-research",
+      "source_label": "Google Research",
+      "category": "研究",
+      "parser": "rss",
+      "url": "https://research.google/blog/rss/",
+      "enabled": true,
+      "limit": 6,
+      "description": "Google 全线研究"
+    },
+    {
+      "id": "apple-ml",
+      "source_label": "Apple ML Research",
+      "category": "研究",
+      "parser": "rss",
+      "url": "https://machinelearning.apple.com/rss.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "苹果设备端机器学习"
+    },
+    {
+      "id": "nvidia-ai",
+      "source_label": "NVIDIA AI Blog",
+      "category": "研究",
+      "parser": "rss",
+      "url": "https://blogs.nvidia.com/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "GPU、CUDA 与 AI 应用"
+    },
+    {
+      "id": "hf-blog",
+      "source_label": "Hugging Face Blog",
+      "category": "产品",
+      "parser": "rss",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "开源模型与工具"
+    },
+    {
+      "id": "mistral",
+      "source_label": "Mistral AI",
+      "category": "产品",
+      "parser": "rss",
+      "url": "https://mistral.ai/rss.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "欧洲开源大模型"
+    },
+    {
+      "id": "the-verge-ai",
+      "source_label": "The Verge AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "科技媒体 AI 频道"
+    },
+    {
+      "id": "techcrunch-ai",
+      "source_label": "TechCrunch AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "创投科技 AI 报道"
+    },
+    {
+      "id": "ars-technica-ai",
+      "source_label": "Ars Technica AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://arstechnica.com/ai/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "深度科技报道"
+    },
+    {
+      "id": "wired-ai",
+      "source_label": "WIRED AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.wired.com/feed/tag/ai/latest/rss",
+      "enabled": true,
+      "limit": 6,
+      "description": "《连线》AI 报道"
+    },
+    {
+      "id": "mit-tech-review",
+      "source_label": "MIT Tech Review",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.technologyreview.com/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "深度科技评论"
+    },
+    {
+      "id": "venturebeat-ai",
+      "source_label": "VentureBeat AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://venturebeat.com/category/ai/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "企业 AI 资讯"
+    },
+    {
+      "id": "zdnet-ai",
+      "source_label": "ZDNet AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
+      "enabled": true,
+      "limit": 6,
+      "description": "企业科技"
+    },
+    {
+      "id": "cnet-ai",
+      "source_label": "CNET AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.cnet.com/rss/news/",
+      "enabled": true,
+      "limit": 6,
+      "description": "消费科技"
+    },
+    {
+      "id": "techradar-ai",
+      "source_label": "TechRadar AI",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.techradar.com/rss",
+      "enabled": true,
+      "limit": 6,
+      "description": "科技测评"
+    },
+    {
+      "id": "scientific-american",
+      "source_label": "Scientific American",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.scientificamerican.com/platform/syndication/rss/",
+      "enabled": true,
+      "limit": 6,
+      "description": "科普"
+    },
+    {
+      "id": "bloomberg-tech",
+      "source_label": "Bloomberg Technology",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://feeds.bloomberg.com/technology/news.rss",
+      "enabled": true,
+      "limit": 6,
+      "description": "商业科技"
+    },
+    {
+      "id": "marktechpost",
+      "source_label": "MarkTechPost",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.marktechpost.com/feed/",
+      "enabled": true,
+      "limit": 6,
+      "description": "论文解读"
+    },
+    {
+      "id": "the-gradient",
+      "source_label": "The Gradient",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://thegradient.pub/rss/",
+      "enabled": true,
+      "limit": 6,
+      "description": "深度 AI 评论"
+    },
+    {
+      "id": "hacker-news",
+      "source_label": "Hacker News",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://hnrss.org/frontpage",
+      "enabled": true,
+      "limit": 6,
+      "description": "技术社区热点"
+    },
+    {
+      "id": "arxiv-cs-ai",
+      "source_label": "arXiv cs.AI",
+      "category": "论文",
+      "parser": "rss",
+      "url": "http://export.arxiv.org/rss/cs.AI",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 预印本论文"
+    },
+    {
+      "id": "nature-ml",
+      "source_label": "Nature ML",
+      "category": "论文",
+      "parser": "rss",
+      "url": "https://www.nature.com/subjects/machine-learning.rss",
+      "enabled": true,
+      "limit": 6,
+      "description": "《自然》机器学习"
+    },
+    {
+      "id": "last-week-in-ai",
+      "source_label": "Last Week in AI",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://lastweekin.ai/feed",
+      "enabled": true,
+      "limit": 6,
+      "description": "每周 AI 摘要"
+    },
+    {
+      "id": "dwarkesh",
+      "source_label": "Dwarkesh Patel",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.dwarkesh.com/feed",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI/创业深度访谈"
+    },
+    {
+      "id": "lennys-newsletter",
+      "source_label": "Lenny's Newsletter",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.lennysnewsletter.com/feed",
+      "enabled": true,
+      "limit": 6,
+      "description": "产品管理"
+    },
+    {
+      "id": "ethan-mollick",
+      "source_label": "Ethan Mollick",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://www.oneusefulthing.org/feed",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 实际应用"
+    },
+    {
+      "id": "ahead-of-ai",
+      "source_label": "Ahead of AI (Raschka)",
+      "category": "Newsletter",
+      "parser": "rss",
+      "url": "https://magazine.sebastianraschka.com/feed",
+      "enabled": true,
+      "limit": 6,
+      "description": "LLM 训练分析"
     }
   ]
 }

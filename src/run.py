@@ -68,8 +68,10 @@ def main():
         print(f"🧹 retention：清掉 {purged} 条过期条目、{removed_imgs} 张无引用图片")
 
     if "--no-render" not in sys.argv:
-        interactions = {s["id"]: s.get("open", "detail") for s in load_sources()}
-        out = render_site(items, interactions)
+        srcs = load_sources()
+        interactions = {s["id"]: s.get("open", "detail") for s in srcs}
+        descriptions = {s["source_label"]: s.get("description", "") for s in srcs}
+        out = render_site(items, interactions, descriptions)
         print(f"🖼  已渲染 → {out}（{len(items)} 条）")
 
 

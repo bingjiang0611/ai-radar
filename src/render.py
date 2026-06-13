@@ -9,6 +9,7 @@
 """
 
 import html
+import json
 import re
 import shutil
 from datetime import datetime
@@ -26,6 +27,7 @@ _CAT_COLORS = {
     "视频": "bg-rose-100 text-rose-700",
     "播客": "bg-amber-100 text-amber-700",
     "Newsletter": "bg-sky-100 text-sky-700",
+    "资讯": "bg-orange-100 text-orange-700",
     "推文": "bg-cyan-100 text-cyan-700",
 }
 _CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
@@ -56,12 +58,13 @@ _INDEX_SCRIPT = """
   let activeCat = '', activeSource = '';
   const inCat = el => !activeCat || el.dataset.category === activeCat;
   // 来源类型标识（按媒介分类）
-  const CAT_ICON = {'论文':'📄','研究':'🔬','产品':'🚀','视频':'▶️','播客':'🎙️','Newsletter':'✉️','推文':'🐦'};
+  const CAT_ICON = {'论文':'📄','研究':'🔬','产品':'🚀','视频':'▶️','播客':'🎙️','Newsletter':'✉️','资讯':'📰','推文':'🐦'};
 
   function makeSourceBtn(label, count, src, icon) {
     const b = document.createElement('button');
     b.className = 'src-btn flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm md:w-full md:justify-between md:rounded-md md:py-1.5';
     b.dataset.src = src;
+    if (src && window.SOURCE_DESC && window.SOURCE_DESC[src]) b.title = window.SOURCE_DESC[src];
     const left = document.createElement('span'); left.className = 'flex min-w-0 items-center gap-1.5';
     if (icon) { const ic = document.createElement('span'); ic.className = 'shrink-0'; ic.textContent = icon; left.appendChild(ic); }
     const name = document.createElement('span'); name.className = 'truncate'; name.textContent = label; left.appendChild(name);
@@ -206,7 +209,8 @@ def _category_tabs(categories):
     return "\n          ".join(btns)
 
 
-def _render_index(items, out, interactions):
+def _render_index(items, out, interactions, descriptions):
+    desc_json = json.dumps(descriptions, ensure_ascii=False)
     categories = sorted({i.get("category", "") for i in items if i.get("category")})
     sections, cur_day, buf = [], None, []
     for it in items:
@@ -254,6 +258,7 @@ def _render_index(items, out, interactions):
       <p class="py-8 text-center text-xs text-zinc-300">共 {len(items)} 条 · 生成于 {generated}</p>
     </main>
   </div>
+  <script>window.SOURCE_DESC = {desc_json};</script>
 {_INDEX_SCRIPT}
 </body>
 </html>
@@ -281,7 +286,7 @@ def _tabs(item):
       <div id="p-zh" class="tab-panel mt-5 hidden">{zh_panel}</div>"""
 
 
-def _render_detail(item, out):
+def _render_detail(item, out, descriptions):
     title_zh = item.get("title_zh") or ""
     title = item.get("title") or ""
     head_title = title_zh or title
@@ -292,6 +297,8 @@ def _render_detail(item, out):
     url = _safe_url(item.get("url", ""))
     when = item.get("published_at") or _day(item)
     embed = _youtube_embed(item.get("url", ""))  # 视频→站内可播
+    desc = descriptions.get(item.get("source_label", ""), "")
+    desc_html = f'<p class="mt-1 text-xs text-zinc-400">{_e(desc)}</p>' if desc else ""
 
     page = f"""{_head(head_title)}
 {_CONTENT_STYLE}
@@ -309,6 +316,7 @@ def _render_detail(item, out):
       <span class="text-zinc-300">·</span>
       <span class="text-zinc-400">{_e(when)}</span>
     </div>
+    {desc_html}
     <h1 class="mt-2 text-2xl font-bold leading-snug">{_e(head_title)}</h1>
     {subtitle}
     <div class="mt-4 flex flex-wrap gap-2">
@@ -327,15 +335,17 @@ def _render_detail(item, out):
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
-def render_site(items, interactions=None, out_dir=None):
-    """interactions: {source_id: 'detail'|'link'}。link 模式的源卡片直跳原链、不生成详情页。"""
+def render_site(items, interactions=None, descriptions=None, out_dir=None):
+    """interactions: {source_id: 'detail'|'link'}；descriptions: {source_label: 说明}。
+    link 模式的源卡片直跳原链、不生成详情页。"""
     interactions = interactions or {}
+    descriptions = descriptions or {}
     out = Path(out_dir) if out_dir else DIST
     # 清掉旧详情页，避免改成 link 模式 / 被 retention 删掉的条目残留页面
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
-    _render_index(items, out, interactions)
+    _render_index(items, out, interactions, descriptions)
     for it in items:
         if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":
-            _render_detail(it, out)
+            _render_detail(it, out, descriptions)
     return out / "index.html"
