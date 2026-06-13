@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from fetch import resolve_url    # noqa: E402
 from parsers import PARSERS      # noqa: E402
 from store import init_db, insert_items, all_items  # noqa: E402
 from render import render_site   # noqa: E402
@@ -31,8 +32,9 @@ def fetch_all():
         if parser is None:
             print(f"  ✗ {s['source_label']}: 未知 parser '{s['parser']}'", file=sys.stderr)
             continue
+        resolved = dict(s, url=resolve_url(s["url"]))  # 填 {week}/{date} 占位
         try:
-            rows = parser(s)
+            rows = parser(resolved)
         except Exception as e:  # noqa: BLE001 — 单源失败不中断整轮
             print(f"  ✗ {s['source_label']}: {e}", file=sys.stderr)
             continue

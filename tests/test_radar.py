@@ -1,6 +1,7 @@
 """ai-radar 单测：URL 归一化 / 去重 / RSS·Atom 解析 / JSON 解析。零网络。"""
 
 import json
+import re
 import sqlite3
 import sys
 import unittest
@@ -8,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from fetch import normalize_url                       # noqa: E402
+from fetch import normalize_url, resolve_url          # noqa: E402
 from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
 from store import init_db, insert_items, all_items, url_hash  # noqa: E402
 
@@ -58,6 +59,17 @@ class TestNormalize(unittest.TestCase):
             url_hash("https://example.com/a?utm_source=x"),
             url_hash("https://example.com/a/"),
         )
+
+
+class TestResolveUrl(unittest.TestCase):
+    def test_no_placeholder_unchanged(self):
+        self.assertEqual(resolve_url("https://x.com/a"), "https://x.com/a")
+
+    def test_week_placeholder(self):
+        self.assertRegex(resolve_url("https://x.com/a?week={week}"), r"\?week=\d{4}-W\d{2}$")
+
+    def test_date_placeholder(self):
+        self.assertRegex(resolve_url("https://x.com/{date}"), r"/\d{4}-\d{2}-\d{2}$")
 
 
 class TestRss(unittest.TestCase):

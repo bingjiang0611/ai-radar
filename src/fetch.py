@@ -7,6 +7,7 @@ URL 归一化用于去重 hash：去掉追踪参数、统一 host 大小写、�
 
 import subprocess
 import sys
+from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 # 追踪类 query 参数前缀，去重前剥掉
@@ -27,6 +28,17 @@ def fetch(url, timeout=30):
     except Exception as e:  # noqa: BLE001 — 单个源失败不应中断整轮抓取
         print(f"  ⚠️  抓取出错 {url}: {e}", file=sys.stderr)
         return None
+
+
+def resolve_url(url):
+    """替换 URL 里的时间占位符，让"当前周/当天"类源不用每次手改：
+    {week} → 当前 ISO 周(如 2026-W24)；{date} → 今天(2026-06-13)。
+    """
+    if "{" not in url:
+        return url
+    now = datetime.now()
+    iso = now.isocalendar()  # (ISO 年, ISO 周, 星期)
+    return url.replace("{week}", f"{iso[0]}-W{iso[1]:02d}").replace("{date}", now.strftime("%Y-%m-%d"))
 
 
 def normalize_url(url):

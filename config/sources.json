@@ -73,11 +73,11 @@
       "limit": 10
     },
     {
-      "id": "hf-daily-papers",
-      "source_label": "Hugging Face Daily Papers",
+      "id": "hf-weekly-papers",
+      "source_label": "Hugging Face 本周热点",
       "category": "论文",
       "parser": "json_api",
-      "url": "https://huggingface.co/api/daily_papers",
+      "url": "https://huggingface.co/api/daily_papers?week={week}",
       "enabled": true,
       "limit": 15,
       "json": {
@@ -85,7 +85,8 @@
         "title": "paper.title",
         "url_template": "https://huggingface.co/papers/{paper.id}",
         "summary_template": "{paper.upvotes} upvotes"
-      }
+      },
+      "_note": "?week={week} 自动取当前 ISO 周(由 resolve_url 替换),返回该周 upvotes top 50;每日榜用 https://huggingface.co/api/daily_papers"
     },
     {
       "id": "anthropic-news",
