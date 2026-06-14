@@ -207,11 +207,20 @@ def md_to_html(md):
 _STRIP_TAGS = re.compile(r"(?is)<(script|style|nav|header|footer|aside|form|svg|button|figure)\b[^>]*>.*?</\1>")
 _ARTICLE = re.compile(r"(?is)<article\b[^>]*>(.*?)</article>")
 _BLOCK = re.compile(r"(?is)<(p|h[1-3])\b[^>]*>(.*?)</\1>")
+# 服务端直出新闻站正文末尾常见的非正文段落(广告/活动推广/作者 bio/订阅 CTA/UI 残片)——抽正文时整段丢弃
+_BOILERPLATE = re.compile(
+    r"(?i)(get an inside look at what it takes|you can contact or verify outreach"
+    r"|please logout and then login again|techcrunch disrupt|all stage passes"
+    r"|is a freelance (contributor|writer|journalist)|fill out (this|the) form"
+    r"|sign up (for|to) (our |the )?.{0,30}newsletter|subscribe (for|to) (our |the )?.{0,30}newsletter"
+    r"|register now (and|to)|join us at)"
+)
 
 
 def _extract_article(html):
     """站点无关地从服务端直出的 HTML 抽正文:剥非正文容器 → 限定到 <article>(若有)→ 取长 <p> 与小标题,
-    输出纯文本段落(转义,不带外链/图片——避免破图/跟踪链)。拿不到足量正文返回 ""。"""
+    丢弃广告/作者 bio/订阅 CTA 等 boilerplate 段,输出纯文本段落(转义,不带外链/图片——避免破图/跟踪链)。
+    拿不到足量正文返回 ""。"""
     if not html:
         return ""
     h = _STRIP_TAGS.sub(" ", html)
@@ -220,6 +229,8 @@ def _extract_article(html):
     out, total = [], 0
     for tag, inner in _BLOCK.findall(scope):
         text = re.sub(r"\s+", " ", _unescape(re.sub(r"(?is)<[^>]+>", "", inner))).strip()
+        if _BOILERPLATE.search(text):  # 广告/活动推广/作者 bio/订阅 CTA/UI 残片 → 丢
+            continue
         if tag == "p":
             if len(text) < 60:
                 continue
