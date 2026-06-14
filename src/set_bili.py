@@ -3,17 +3,32 @@
 用法:
     python3 src/set_bili.py <item_hash 或 /item/<hash>.html 或原 YouTube URL> <bilibili_url>
 
-之后 `python3 src/run.py --render-only`,该视频详情页的「中文翻译」tab 会出现可站内播放的
-B站 lite 门面(点封面才挂 player.bilibili.com,不跳转)。清空翻译:bilibili_url 传空串 ""。
+设置时会从 B站 API 取该视频的 cid 一并存入(player 加载更可靠)。之后
+`python3 src/run.py --render-only`,该视频详情页「中文」tab 会出现可站内播放的 B站 lite
+门面(点封面才挂 player.bilibili.com,不跳转)。清空翻译:bilibili_url 传空串 ""。
 """
 
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from store import _conn, init_db  # noqa: E402
+
+
+def _fetch_cid(bv):
+    try:
+        r = subprocess.run(
+            ["curl", "-s", "-A", "Mozilla/5.0", "--max-time", "20",
+             f"https://api.bilibili.com/x/web-interface/view?bvid={bv}"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=25,
+        )
+        return str((json.loads(r.stdout).get("data") or {}).get("cid") or "")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def main():
@@ -30,10 +45,16 @@ def main():
         print(f"找不到条目: {key}", file=sys.stderr)
         c.close()
         return 2
-    c.execute("UPDATE items SET video_url=? WHERE hash=?", (bili, row["hash"]))
+    stored = bili
+    bv = re.search(r"BV[0-9A-Za-z]+", bili)
+    if bv and "cid=" not in bili:
+        cid = _fetch_cid(bv.group(0))
+        if cid:
+            stored = bili + ("&" if "?" in bili else "?") + "cid=" + cid
+    c.execute("UPDATE items SET video_url=? WHERE hash=?", (stored, row["hash"]))
     c.commit()
     c.close()
-    print(f"已设 B站翻译:{row['title'][:50]} → {bili or '(清空)'}")
+    print(f"已设 B站翻译:{row['title'][:50]} → {stored or '(清空)'}")
     return 0
 
 

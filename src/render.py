@@ -359,7 +359,7 @@ if(bar)window.addEventListener('scroll',function(){var h=document.documentElemen
   f.addEventListener('click',function(){
     var yt=f.dataset.yt,bv=f.dataset.bv,url='';
     if(yt&&/^[\\w-]{11}$/.test(yt))url='https://www.youtube.com/embed/'+yt+'?autoplay=1';
-    else if(bv&&/^BV[0-9A-Za-z]+$/.test(bv))url='https://player.bilibili.com/player.html?isOutside=true&bvid='+bv+'&autoplay=1&danmaku=0';
+    else if(bv&&/^BV[0-9A-Za-z]+$/.test(bv))url='https://player.bilibili.com/player.html?isOutside=true&bvid='+bv+(f.dataset.cid?'&cid='+f.dataset.cid:'')+'&p=1&autoplay=1&danmaku=0';
     else return;
     var ifr=document.createElement('iframe');
     ifr.style.cssText='width:100%;aspect-ratio:16/9;border:0;border-radius:16px;display:block';
@@ -709,7 +709,9 @@ def _bili_embed(bili_url, yt_url, src=""):
         return ""
     vid = _yt_id(yt_url)
     cover = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
-    return _facade(cover, src, "哔哩哔哩 · 中文翻译", f'data-bv="{bv}"', hint="中文翻译 · 点击播放")
+    cid = re.search(r"cid=(\d+)", bili_url or "")  # set_bili.py 取自 B站 API,有则更可靠加载
+    data = f'data-bv="{bv}"' + (f' data-cid="{cid.group(1)}"' if cid else "")
+    return _facade(cover, src, "哔哩哔哩 · 中文翻译", data, hint="中文翻译 · 点击播放")
 
 
 def _tabs(item):
@@ -747,30 +749,30 @@ def _render_detail(item, out, descriptions):
             f'<span class="src">{_e(src)}</span><span class="mono">· {_e(when)}</span></div>')
 
     if is_video:
-        # ---- 视频态 ----
-        facade = _youtube_embed(raw_url, src)
-        subtitle = item.get("summary_zh") or item.get("summary") or (title if title_zh and title != title_zh else "")
+        # ---- 视频态:英文(YouTube 原片)/ 中文(B站翻译搬运)双 tab ----
+        subtitle = title if (title_zh and title and title_zh != title) else ""
         sub_html = f'<p class="subtitle" style="font-style:normal;font-size:14.5px;color:var(--muted)">{_e(subtitle)}</p>' if subtitle else ""
-        desc = item.get("summary_zh") or item.get("summary") or ""
-        desc_panel = f'<p>{_e(desc)}</p>' if desc else '<p style="color:var(--muted)">本条视频默认只抓标题与链接;点上方封面在站内播放,或「在 YouTube 打开」。</p>'
-        # 已翻译搬运到 B站(video_url 存 bilibili 链接)→ 「中文翻译」tab 放可站内播放的 B站门面
+        # 英文 tab:YouTube 门面(点击站内播放)+ 英文简介
+        desc_en = item.get("summary") or ""
+        desc_html = (f'<p style="font-family:var(--serif);font-size:16px;line-height:1.7;color:var(--fg-2);margin-top:18px">{_e(desc_en)}</p>'
+                     if desc_en else "")
+        en_panel = _youtube_embed(raw_url, src) + desc_html
+        # 中文 tab:已翻译搬运到 B站(video_url)→ 可站内播放的 B站门面;否则诚实空态
         bili = _bili_embed(item.get("video_url", ""), raw_url, src)
         if bili:
-            zh_label = "中文翻译"
             zh_panel = (bili + '<p style="margin-top:14px;font-size:13px;color:var(--muted)">本视频已翻译并搬运至 '
                         f'<a href="{_safe_url(item.get("video_url",""))}" target="_blank" rel="noopener" '
-                        'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点上方封面在站内播放中文翻译版。</p>')
+                        'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点封面在站内播放中文翻译版。</p>')
         else:
-            zh_label, zh_panel = "中文字幕", _tr_empty("视频")
-        body = (f'<main class="wrap {cat_cls}">{facade}'
-                f'<div style="margin-top:22px"></div>'
+            zh_panel = _tr_empty("视频")
+        body = (f'<main class="wrap {cat_cls}">'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
                 f'<div class="actions">'
                 f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}在 YouTube 打开</a>'
                 f'<button class="btn" id="copy" data-url="{_e(raw_url)}">{_COPY_SVG}<span>复制链接</span></button></div>'
-                f'<div class="tabs"><button class="tab on" data-panel="p-desc">简介</button>'
-                f'<button class="tab" data-panel="p-zh">{zh_label}</button></div>'
-                f'<section class="panel on doc" id="p-desc">{desc_panel}</section>'
+                f'<div class="tabs"><button class="tab on" data-panel="p-en">英文</button>'
+                f'<button class="tab" data-panel="p-zh">中文</button></div>'
+                f'<section class="panel on" id="p-en">{en_panel}</section>'
                 f'<section class="panel" id="p-zh">{zh_panel}</section></main>')
         progress = ""
     else:
