@@ -173,6 +173,37 @@ class TestContent(unittest.TestCase):
     def test_md_to_html_escapes_html(self):
         self.assertIn("&lt;script&gt;", content.md_to_html("a <script> b"))
 
+    def test_extract_article_picks_body_drops_chrome(self):
+        body = "A" * 220  # 够长的正文段(过 200 字正文闸门)
+        html = (f"<html><body><nav>menu links here all over</nav>"
+                f"<article><h2>Heading</h2><p>{body}</p>"
+                f"<p>short</p><script>junk()</script></article>"
+                f"<footer>{'F' * 90}</footer></body></html>")
+        out = content._extract_article(html)
+        self.assertIn(f"<p>{body}</p>", out)       # 长正文段保留
+        self.assertIn("<h2>Heading</h2>", out)     # 小标题保留
+        self.assertNotIn("short", out)             # <60 字短段丢弃
+        self.assertNotIn("menu links", out)        # nav 剥掉
+        self.assertNotIn("junk()", out)            # script 剥掉
+        self.assertNotIn("FFF", out)               # footer 剥掉
+
+    def test_extract_article_drops_boilerplate(self):
+        real = "Real article sentence number one that is long enough to count. " * 4
+        html = (f"<article><p>{real}</p>"
+                f"<p>Sign up for our weekly newsletter to get the latest news delivered.</p>"
+                f"<p>Jane Doe is a freelance contributor for the site and writes about tech.</p>"
+                f"<p>Get an inside look at what it takes to scale and succeed at the event.</p>"
+                f"</article>")
+        out = content._extract_article(html)
+        self.assertIn("Real article sentence", out)
+        self.assertNotIn("newsletter", out)
+        self.assertNotIn("freelance contributor", out)
+        self.assertNotIn("Get an inside look", out)
+
+    def test_extract_article_too_short_returns_empty(self):
+        # 付费墙 stub / 纯导航:正文 <200 字 → 视为没抓到
+        self.assertEqual(content._extract_article("<article><p>" + "x" * 70 + "</p></article>"), "")
+
 
 class TestRetention(unittest.TestCase):
     def setUp(self):
