@@ -38,13 +38,13 @@ _CAT_ORDER = ["研究", "产品", "Newsletter", "资讯", "论文", "播客", "�
 _ICONS = {}  # source_label -> /icons/<domain>.png（render_site 注入）
 
 
-def _favicon(label, size="h-7 w-7"):
-    """来源头像：有 favicon 用图，否则首字母占位块。"""
+def _favicon(label, cls="h-7 w-7 rounded-md"):
+    """来源头像：有 favicon 用图，否则首字母占位块。cls 控制尺寸/圆角。"""
     icon = _ICONS.get(label, "")
     if icon:
-        return f'<img src="{_e(icon)}" class="{size} shrink-0 rounded-md bg-white object-contain" alt="" loading="lazy">'
+        return f'<img src="{_e(icon)}" class="{cls} shrink-0 bg-white object-contain" alt="" loading="lazy">'
     ch = label.strip()[:1] if label.strip() else "•"
-    return f'<span class="{size} flex shrink-0 items-center justify-center rounded-md bg-zinc-200 text-xs font-medium text-zinc-600">{_e(ch)}</span>'
+    return f'<span class="{cls} flex shrink-0 items-center justify-center bg-zinc-200 text-xs font-medium text-zinc-600">{_e(ch)}</span>'
 
 # 详情页正文样式（Tailwind CDN 不含 typography 插件，手写关键排版）
 _CONTENT_STYLE = """
@@ -86,7 +86,7 @@ _FEED_SCRIPT = """
   const searchEl = document.getElementById('search');
   const src = new URLSearchParams(location.search).get('source') || '';
   const nameEl = document.getElementById('feed-src');
-  if (nameEl) nameEl.textContent = src || '全部来源';
+  if (nameEl) nameEl.textContent = src || '时间流';
   function apply() {
     const q = ((searchEl && searchEl.value) || '').trim().toLowerCase();
     items.forEach(el => {
@@ -234,7 +234,8 @@ def _render_home(items, descriptions, out):
   <header class="sticky top-0 z-10 border-b border-zinc-200 bg-white/90 backdrop-blur">
     <div class="mx-auto flex max-w-5xl items-center gap-3 px-4 py-2.5">
       <h1 class="text-lg font-bold tracking-tight">AI&nbsp;Radar</h1>
-      <span class="text-sm text-zinc-400">{len(stats)} 个来源 · {total} 条</span>
+      <a href="/feed.html" class="text-sm font-medium text-zinc-500 hover:text-blue-600">时间流</a>
+      <span class="hidden text-sm text-zinc-400 sm:inline">{len(stats)} 个来源 · {total} 条</span>
       <input id="search" type="search" placeholder="搜索来源…"
              class="ml-auto w-44 rounded-full border border-zinc-200 px-3 py-1 text-sm outline-none focus:border-blue-400">
     </div>
@@ -271,13 +272,17 @@ def _card(item, mode="detail"):
         f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(summary)}</p>'
         if summary else ""
     )
-    return f"""      <article class="item border-b border-zinc-100 py-4" data-category="{_e(cat)}" data-source="{_e(src)}" data-text="{search_blob}">
-        <div class="flex items-center gap-2 text-xs">
-          <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
-          <span class="text-zinc-400">{_e(when)}</span>
+    return f"""      <article class="item flex gap-3 border-b border-zinc-100 py-3.5" data-category="{_e(cat)}" data-source="{_e(src)}" data-text="{search_blob}">
+        {_favicon(src, "h-10 w-10 rounded-full")}
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-x-1.5 text-sm">
+            <span class="font-semibold text-zinc-800">{_e(src)}</span>
+            <span class="rounded px-1.5 py-0.5 text-xs font-medium {chip}">{_e(cat)}</span>
+            <span class="text-zinc-400">· {_e(when)}</span>
+          </div>
+          <a href="{href}"{link_attrs} class="mt-0.5 block font-medium leading-snug text-zinc-800 hover:text-blue-600">{_e(title)}{arrow}</a>
+          {summary_html}
         </div>
-        <a href="{href}"{link_attrs} class="mt-1 block text-base font-medium text-zinc-800 hover:text-blue-600">{_e(title)}{arrow}</a>
-        {summary_html}
       </article>"""
 
 
@@ -370,7 +375,7 @@ def _render_detail(item, out, descriptions):
   <main class="mx-auto max-w-2xl px-4 py-6">
     <div class="flex items-center gap-2 text-xs">
       <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
-      {_favicon(src, "h-4 w-4")}
+      {_favicon(src, "h-4 w-4 rounded")}
       <span class="font-mono text-zinc-400">{_e(src)}</span>
       <span class="text-zinc-300">·</span>
       <span class="text-zinc-400">{_e(when)}</span>

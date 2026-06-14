@@ -713,6 +713,48 @@
       "enabled": true,
       "limit": 6,
       "description": "Anthropic 官方 YouTube,AI 安全/对齐研究讲解"
+    },
+    {
+      "id": "yt-greg-isenberg",
+      "source_label": "Greg Isenberg",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCPjNBjflYl0-HQtUvOx0Ibw",
+      "enabled": true,
+      "limit": 6,
+      "description": "Late Checkout CEO,聊创业点子、社区驱动产品与 AI 创业机会,与创始人对谈"
+    },
+    {
+      "id": "wheresyoured-at",
+      "source_label": "Where's Your Ed At",
+      "category": "资讯",
+      "parser": "rss",
+      "url": "https://www.wheresyoured.at/rss/",
+      "enabled": true,
+      "limit": 6,
+      "description": "Ed Zitron 的独立科技评论,犀利批判 AI 行业商业模式、估值叙事与真实经济学"
+    },
+    {
+      "id": "claude-blog",
+      "source_label": "Claude 官方博客",
+      "category": "产品",
+      "parser": "browser",
+      "url": "https://claude.com/blog",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Anthropic 官方博客,Agents / Claude 平台 / Claude Code 相关文章"
+    },
+    {
+      "id": "anthropic-engineering",
+      "source_label": "Anthropic Engineering",
+      "category": "研究",
+      "parser": "browser",
+      "url": "https://www.anthropic.com/engineering",
+      "enabled": true,
+      "limit": 8,
+      "open": "link",
+      "description": "Anthropic 工程团队深度文章(building effective agents、context engineering 等)"
     }
   ]
 }
