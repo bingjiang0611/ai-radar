@@ -79,7 +79,7 @@ def to_item(t):
     else:
         prefix = f"@{handle}"
     return {
-        "title": f"{prefix}：{text}"[:200],
+        "title": f"{prefix}：{text}"[:500],  # 推文全文(≤280,等于不截);时间流标题行不 clamp,完整展示
         "url": f"https://x.com/{handle}/status/{tid}",
         "summary": "",
         "published_at": t.get("createdAtISO") or t.get("createdAt") or "",

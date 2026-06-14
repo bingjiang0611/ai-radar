@@ -65,6 +65,22 @@ def _guess_ext(url, data):
     return "." + m.group(1).replace("jpeg", "jpg") if m else ".img"
 
 
+def _is_image(data):
+    """按魔数判定是否真图片——挡住「URL 后缀是 .jpg 但内容其实是 HTML 错误页/登录页」这类。"""
+    if not data:
+        return False
+    if data[:3] == b"\xff\xd8\xff":               # jpg
+        return True
+    if data[:8] == b"\x89PNG\r\n\x1a\n":           # png
+        return True
+    if data[:6] in (b"GIF87a", b"GIF89a"):         # gif
+        return True
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return True
+    head = data[:400].lstrip().lower()             # svg(可能带 <?xml 头)
+    return head[:4] == b"<svg" or (head[:5] == b"<?xml" and b"<svg" in head)
+
+
 def _download_image(url):
     """下载图片 → dist/img/{hash}{ext}；返回站内路径 /img/... 或 None（失败/过大/非图片）。"""
     url = _unescape(url)  # HTML 属性里的 &amp; → & —— 否则带 query 的 URL(如 Next.js _next/image?...&w=)参数传不全
@@ -78,11 +94,10 @@ def _download_image(url):
     data = r.stdout
     if r.returncode != 0 or not data or len(data) > _MAX_IMG_BYTES:
         return None
-    ext = _guess_ext(url, data)
-    if ext == ".img":  # 识别不出图片格式(多半是错误页/占位符,如 33 字节的「w parameter required」)→ 不存,保留外链
+    if not _is_image(data):  # 拿到的是 HTML 错误页/登录页(非真图)→ 不存,localize_images 会丢掉该 <img>
         return None
     h = hashlib.sha256(data).hexdigest()[:16]
-    name = f"{h}{ext}"
+    name = f"{h}{_guess_ext(url, data)}"
     DIST_IMG.mkdir(parents=True, exist_ok=True)
     path = DIST_IMG / name
     if not path.exists():
@@ -100,7 +115,7 @@ def localize_images(html):
         if not src.lower().startswith(("http://", "https://")):
             return m.group(0)
         local = _download_image(src)
-        return f"{prefix}{local}{suffix}" if local else m.group(0)
+        return f"{prefix}{local}{suffix}" if local else ""  # 下不到有效图 → 丢掉整个 <img>,不留破图
 
     return re.sub(r'(<img[^>]*\ssrc=")([^"]+)("[^>]*>)', repl, html, flags=re.I)
 
