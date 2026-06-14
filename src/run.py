@@ -74,8 +74,9 @@ def main():
         srcs = load_sources()
         interactions = {s["id"]: s.get("open", "detail") for s in srcs}
         descriptions = {s["source_label"]: s.get("description", "") for s in srcs}
-        out = render_site(items, interactions, descriptions)
-        print(f"🖼  已渲染 → {out}（{len(items)} 条）")
+        icons = {s["source_label"]: content.fetch_favicon(s["url"]) for s in srcs if s.get("enabled")}
+        out = render_site(items, interactions, descriptions, icons)
+        print(f"🖼  已渲染 → {out}（{len(items)} 条，头像 {sum(1 for v in icons.values() if v)} 个）")
 
 
 if __name__ == "__main__":

@@ -9,11 +9,39 @@ import hashlib
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import nh3
 
-DIST_IMG = Path(__file__).resolve().parent.parent / "dist" / "img"
+_DIST = Path(__file__).resolve().parent.parent / "dist"
+DIST_IMG = _DIST / "img"
+DIST_ICONS = _DIST / "icons"
 _MAX_IMG_BYTES = 8_000_000
+
+
+def fetch_favicon(url):
+    """取来源域名的 favicon 下载进站 dist/icons/<domain>.png（缓存，按域名），返回站内路径 /icons/... 或 ""。
+    用 Google s2 favicon 服务（按域名稳定返回 PNG）。已存在则不重下。"""
+    dom = urlsplit(url if "//" in (url or "") else "//" + (url or "")).netloc.lower()
+    if not dom:
+        return ""
+    safe = re.sub(r"[^a-z0-9.-]", "_", dom)
+    DIST_ICONS.mkdir(parents=True, exist_ok=True)
+    path = DIST_ICONS / f"{safe}.png"
+    rel = f"/icons/{safe}.png"
+    if path.exists():
+        return rel
+    src = f"https://www.google.com/s2/favicons?domain={dom}&sz=64"
+    try:
+        r = subprocess.run(["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "15", src],
+                           capture_output=True, timeout=20)
+    except Exception:  # noqa: BLE001
+        return ""
+    data = r.stdout
+    if r.returncode == 0 and data and len(data) > 100:
+        path.write_bytes(data)
+        return rel
+    return ""
 
 
 def sanitize(html):

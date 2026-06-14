@@ -35,6 +35,17 @@ _CAT_DEFAULT = "bg-zinc-100 text-zinc-600"
 _CAT_ICON = {"论文": "📄", "研究": "🔬", "产品": "🚀", "视频": "▶️", "播客": "🎙️", "Newsletter": "✉️", "资讯": "📰", "推文": "🐦"}
 _CAT_ORDER = ["研究", "产品", "Newsletter", "资讯", "论文", "播客", "视频", "推文"]
 
+_ICONS = {}  # source_label -> /icons/<domain>.png（render_site 注入）
+
+
+def _favicon(label, size="h-7 w-7"):
+    """来源头像：有 favicon 用图，否则首字母占位块。"""
+    icon = _ICONS.get(label, "")
+    if icon:
+        return f'<img src="{_e(icon)}" class="{size} shrink-0 rounded-md bg-white object-contain" alt="" loading="lazy">'
+    ch = label.strip()[:1] if label.strip() else "•"
+    return f'<span class="{size} flex shrink-0 items-center justify-center rounded-md bg-zinc-200 text-xs font-medium text-zinc-600">{_e(ch)}</span>'
+
 # 详情页正文样式（Tailwind CDN 不含 typography 插件，手写关键排版）
 _CONTENT_STYLE = """
 <style>
@@ -197,7 +208,7 @@ def _render_home(items, descriptions, out):
             <span class="rounded px-1.5 py-0.5 font-medium {chip}">{icon} {_e(cat)}</span>
             <span class="ml-auto text-zinc-400">{s["count"]} 条</span>
           </div>
-          <h3 class="mt-2 font-semibold text-zinc-800">{_e(lbl)}</h3>
+          <div class="mt-2 flex items-center gap-2">{_favicon(lbl)}<h3 class="font-semibold text-zinc-800">{_e(lbl)}</h3></div>
           {desc_html}
           <p class="mt-auto pt-2 text-xs text-zinc-400">最近更新 {_e(s["latest"])}</p>
         </a>'''
@@ -359,6 +370,7 @@ def _render_detail(item, out, descriptions):
   <main class="mx-auto max-w-2xl px-4 py-6">
     <div class="flex items-center gap-2 text-xs">
       <span class="rounded px-1.5 py-0.5 font-medium {chip}">{_e(cat)}</span>
+      {_favicon(src, "h-4 w-4")}
       <span class="font-mono text-zinc-400">{_e(src)}</span>
       <span class="text-zinc-300">·</span>
       <span class="text-zinc-400">{_e(when)}</span>
@@ -382,11 +394,13 @@ def _render_detail(item, out, descriptions):
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
-def render_site(items, interactions=None, descriptions=None, out_dir=None):
-    """interactions: {source_id: 'detail'|'link'}；descriptions: {source_label: 说明}。
+def render_site(items, interactions=None, descriptions=None, icons=None, out_dir=None):
+    """interactions: {source_id: 'detail'|'link'}；descriptions/icons: {source_label: 说明/头像路径}。
     首页=来源卡片；feed.html=单来源列表；link 模式的源条目直跳原链、不生成详情页。"""
+    global _ICONS
     interactions = interactions or {}
     descriptions = descriptions or {}
+    _ICONS = icons or {}
     out = Path(out_dir) if out_dir else DIST
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
