@@ -218,6 +218,9 @@ _FEED_CSS = """
 .item:hover .it-title{color:var(--accent-2)}
 .it-sum{color:var(--muted);font-size:13.2px;line-height:1.55;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .it-title .ext{font-size:12px;color:var(--faint);margin-left:3px}
+.it-orig{color:var(--faint);font-size:13px;line-height:1.55;margin-top:5px;font-style:italic;font-family:var(--serif)}
+.it-media{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.it-media img{max-height:200px;max-width:100%;border-radius:10px;border:1px solid var(--border);object-fit:cover}
 .play{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:var(--cat)}
 .play svg{width:14px;height:14px}
 @media(max-width:560px){.wrap{padding:20px 16px 48px}.nav{display:none}.search input{width:130px}
@@ -565,6 +568,20 @@ def _card(item, mode="detail"):
     else:
         href, is_ext = f'/item/{_e(item.get("hash",""))}.html', False
     ext_attr = ' target="_blank" rel="noopener"' if is_ext else ""
+    if cat == "推文":  # 推文卡片:译文(主)+ 原文(英,弱化)+ 原推配图;链接直跳 X
+        trans = item.get("title_zh") or item.get("title") or ""
+        orig = item.get("title") or ""
+        tw_ext = '<span class="ext">↗</span>' if is_ext else ""
+        orig_html = f'<div class="it-orig">{_e(orig)}</div>' if orig and orig != trans else ""
+        media = item.get("content_html") or ""
+        media_html = f'<div class="it-media">{media}</div>' if media else ""
+        return (f'<a class="item {_cat_class(cat)}" href="{href}"{ext_attr} '
+                f'data-cat="{_e(cat)}" data-source="{_e(src)}" data-text="{_e(f"{trans} {orig} {src}".lower())}">'
+                f'{_avatar(src)}<div class="it-body">'
+                f'<div class="it-meta"><span class="src">{_e(src)}</span>'
+                f'<span class="tag"><span class="dot"></span>{_e(cat)}</span>'
+                f'<span class="time">{_e(_fmt_time(item))}</span></div>'
+                f'<div class="it-title">{_e(trans)}{tw_ext}</div>{orig_html}{media_html}</div></a>')
     blob = _e(f"{title} {summ} {src}".lower())
     play = f'<span class="play">{_PLAY_SVG}</span>' if cat == "视频" else ""
     ext = '<span class="ext">↗</span>' if is_ext else ""

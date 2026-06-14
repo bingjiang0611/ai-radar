@@ -24,6 +24,17 @@ from store import insert_items, url_hash, hash_exists   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
+_TCO = re.compile(r"https?://t\.co/\S+")  # 推文末尾的媒体/引用短链——展示时去掉(噪音)
+
+
+def _clean_text(text):
+    return _TCO.sub("", (text or "").replace("\n", " ")).strip()
+
+
+def is_reply(t):
+    """回复帖:正文以 @ 开头(twitter-cli 无 isReply 字段,用此启发式)。列表里的回复不收。"""
+    return (t.get("text", "") or "").lstrip().startswith("@")
+
 SINCE_HOURS = 24   # 只收最近 24 小时的推文(可被源里 window_hours 覆盖)
 FETCH_N = 200      # twitter-cli 单次抓取上限 ~200;最活跃列表 24h 超 200 条仍会截断(告警提示)
 
@@ -69,7 +80,7 @@ def to_item(t):
     a = t.get("author") or {}
     handle = a.get("screenName", "") if isinstance(a, dict) else ""
     tid = str(t.get("id", ""))
-    text = (t.get("text", "") or "").replace("\n", " ").strip()
+    text = _clean_text(t.get("text", ""))  # 去 t.co 链接 + 折行
     if not handle or not tid:
         return None
     if t.get("isRetweet"):
@@ -78,11 +89,16 @@ def to_item(t):
         prefix = f"@{rb} 🔁 @{handle}" if rb else f"@{handle}"
     else:
         prefix = f"@{handle}"
+    # 原推带图 → 下载进站(content.process:nh3 + 图片本地化),卡片里展示
+    photos = [m.get("url", "") for m in (t.get("media") or [])
+              if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
+    imgs = "".join(f'<img src="{u}">' for u in photos[:4])
     return {
-        "title": f"{prefix}：{text}"[:500],  # 推文全文(≤280,等于不截);时间流标题行不 clamp,完整展示
+        "title": (f"{prefix}：{text}" if text else prefix)[:500],  # 推文全文,时间流标题行不 clamp 完整展示
         "url": f"https://x.com/{handle}/status/{tid}",
         "summary": "",
         "published_at": t.get("createdAtISO") or t.get("createdAt") or "",
+        "content_html": content.process(imgs) if imgs else "",
     }
 
 
@@ -113,6 +129,7 @@ def main():
 
     raw = fetch_list(list_id, FETCH_N)
     recent = [t for t in raw if in_window(t)]          # 先卡 24h 时间窗
+    recent = [t for t in recent if not is_reply(t)]    # 去掉回复帖
     ai = [t for t in recent if is_ai(t.get("text", "") or "")]
     items, seen = [], set()
     for t in ai:
@@ -120,8 +137,7 @@ def main():
         if not it or it["url"] in seen or hash_exists(url_hash(it["url"])):
             continue
         seen.add(it["url"])
-        it["content_html"] = ""
-        items.append(it)
+        items.append(it)  # content_html 由 to_item 设(带图则为本地化 <img>,否则空)
     n = insert_items(items, src)
     # 最旧一条仍落在窗口内 → FETCH_N 把时间窗截断了,可能漏掉更早但仍在 24h 内的推
     capped = bool(raw) and in_window(raw[-1])
