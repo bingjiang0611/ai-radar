@@ -218,6 +218,8 @@ def fetch_article_html(url, timeout=60):
     md = r.stdout or ""
     if r.returncode != 0 or len(md) < 80 or "Just a moment" in md[:500]:
         return ""
+    if md.lstrip()[:9] == '{"data":n':  # Jina 错误包(限流/封禁 code 451 等,HTTP 200 但 body 是 JSON)——不是正文
+        return ""
     return md_to_html(md)
 
 

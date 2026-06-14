@@ -90,17 +90,44 @@ def insert_items(rows, source, conn=None):
     return inserted
 
 
-def purge_old(days=30, conn=None):
-    """删除 fetched_at 早于 days 天前的条目（1 个月 retention，每次抓取顺带清）。返回删除数。"""
+def _parse_dt(s):
+    """解析 published_at / fetched_at：兼容 ISO 与 RFC822(pubDate)。返回带时区 datetime 或 None。"""
+    from email.utils import parsedate_to_datetime
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            d = parsedate_to_datetime(s)
+        except (TypeError, ValueError):
+            return None
+    return d.replace(tzinfo=timezone.utc) if d and d.tzinfo is None else d
+
+
+def purge_old(days=7, conn=None):
+    """按内容新鲜度保留近 days 天:发布时间(published_at)已知且超期 → 删;
+    发布时间未知(如无日期的博客/论文)→ 退回看抓取时间(fetched_at)超期才删。返回删除数。"""
     c = conn or _conn()
     init_db(c)
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    cur = c.execute("DELETE FROM items WHERE fetched_at < ?", (cutoff,))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    purge = []
+    for r in c.execute("SELECT hash, published_at, fetched_at FROM items").fetchall():
+        pub = _parse_dt(r["published_at"])
+        if pub is not None:
+            if pub < cutoff:
+                purge.append(r["hash"])
+        else:
+            fet = _parse_dt(r["fetched_at"])
+            if fet is not None and fet < cutoff:
+                purge.append(r["hash"])
+    for h in purge:
+        c.execute("DELETE FROM items WHERE hash=?", (h,))
     c.commit()
-    deleted = cur.rowcount
     if conn is None:
         c.close()
-    return deleted
+    return len(purge)
 
 
 def all_items(conn=None):

@@ -6,7 +6,9 @@
 """
 
 import json
+import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -14,10 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import content                  # noqa: E402
 from fetch import resolve_url    # noqa: E402
 from parsers import PARSERS      # noqa: E402
-from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
+from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old, _parse_dt  # noqa: E402
 from render import render_site   # noqa: E402
 
-RETENTION_DAYS = 15  # 只保留近 15 天内容（控站点/图片体积）
+RETENTION_DAYS = 7   # 只保留近 7 天内容（控站点/图片体积）
+_SHORT_CONTENT = 400  # feed 正文纯文本短于此 → 视为只给摘要,用 Jina 抓全文补全(非视频/非 link 源)
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "config" / "sources.json"
@@ -30,6 +33,7 @@ def load_sources():
 def fetch_all():
     init_db()
     total_new = 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)  # 发布超 7 天的不收(保持近七天)
     for s in [s for s in load_sources() if s.get("enabled")]:
         if s["parser"] == "browser":
             continue  # browser 源由 ai-radar-scrape skill 用 browser-use 抓取（见 src/ingest.py）
@@ -50,7 +54,17 @@ def fetch_all():
         for r in rows:
             if hash_exists(url_hash(r["url"])):
                 continue
-            r["content_html"] = content.process(r.get("content", "") or "") if mode != "link" else ""
+            pub = _parse_dt(r.get("published_at"))
+            if pub and pub < cutoff:
+                continue  # 发布超 7 天,不收
+            feed_c = r.get("content", "") or ""
+            if mode == "link":
+                r["content_html"] = ""  # 播客等直跳原链,不要正文
+            elif s["category"] != "视频" and len(re.sub(r"<[^>]+>", "", feed_c)) < _SHORT_CONTENT:
+                full = content.fetch_article_html(r["url"])  # feed 只给摘要 → Jina 抓全文补全
+                r["content_html"] = content.process(full) if full else content.process(feed_c)
+            else:
+                r["content_html"] = content.process(feed_c)
             new_rows.append(r)
         n = insert_items(new_rows, s)
         total_new += n
