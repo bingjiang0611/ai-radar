@@ -204,8 +204,49 @@ def md_to_html(md):
     return "\n".join(out)
 
 
+_STRIP_TAGS = re.compile(r"(?is)<(script|style|nav|header|footer|aside|form|svg|button|figure)\b[^>]*>.*?</\1>")
+_ARTICLE = re.compile(r"(?is)<article\b[^>]*>(.*?)</article>")
+_BLOCK = re.compile(r"(?is)<(p|h[1-3])\b[^>]*>(.*?)</\1>")
+
+
+def _extract_article(html):
+    """站点无关地从服务端直出的 HTML 抽正文:剥非正文容器 → 限定到 <article>(若有)→ 取长 <p> 与小标题,
+    输出纯文本段落(转义,不带外链/图片——避免破图/跟踪链)。拿不到足量正文返回 ""。"""
+    if not html:
+        return ""
+    h = _STRIP_TAGS.sub(" ", html)
+    m = _ARTICLE.search(h)
+    scope = m.group(1) if m else h
+    out, total = [], 0
+    for tag, inner in _BLOCK.findall(scope):
+        text = re.sub(r"\s+", " ", _unescape(re.sub(r"(?is)<[^>]+>", "", inner))).strip()
+        if tag == "p":
+            if len(text) < 60:
+                continue
+            out.append(f"<p>{_escape(text)}</p>"); total += len(text)
+        elif text:
+            out.append(f"<{tag}>{_escape(text)}</{tag}>")
+    return "\n".join(out) if total >= 200 else ""  # 正文太少(付费墙 stub/纯导航)→ 视为没抓到
+
+
+def _fetch_direct(url, timeout=30):
+    """直连 curl 取服务端直出 HTML → 抽正文。给 Jina 穿不过的服务端渲染新闻站(TechCrunch/Wired/TechRadar)兜底。"""
+    try:
+        r = subprocess.run(
+            ["curl", "-sL", "-A", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+             "--max-time", str(timeout - 3), url],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+    if r.returncode != 0 or not r.stdout or "Just a moment" in r.stdout[:1000]:
+        return ""  # Cloudflare 等挡住,直连也拿不到
+    return _extract_article(r.stdout)
+
+
 def fetch_article_html(url, timeout=60):
-    """用 Jina 默认模式取单篇正文 → md_to_html。失败/被 Cloudflare 挡 → 返回 ""（详情页回退到「打开原文」）。"""
+    """取单篇正文 HTML：Jina 优先（救 SPA/隐私护栏站）→ Jina 失败再直连 curl 抽正文（救 Jina 限流的新闻站）。
+    都拿不到/被 Cloudflare 挡 → 返回 ""（详情页回退到摘要 +「打开原文」）。"""
     if not url:
         return ""
     try:
@@ -214,12 +255,12 @@ def fetch_article_html(url, timeout=60):
             capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
     except Exception:  # noqa: BLE001
-        return ""
-    md = r.stdout or ""
-    if r.returncode != 0 or len(md) < 80 or "Just a moment" in md[:500]:
-        return ""
-    if md.lstrip()[:9] == '{"data":n':  # Jina 错误包(限流/封禁 code 451 等,HTTP 200 但 body 是 JSON)——不是正文
-        return ""
+        r = None
+    md = (r.stdout if r else "") or ""
+    bad = (r is None or r.returncode != 0 or len(md) < 80
+           or "Just a moment" in md[:500] or md.lstrip()[:9] == '{"data":n')  # Jina 错误包(限流 code 451 等)
+    if bad:
+        return _fetch_direct(url)  # Jina 不行 → 直连兜底
     return md_to_html(md)
 
 
