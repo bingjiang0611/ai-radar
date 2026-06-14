@@ -226,7 +226,7 @@ class TestRender(unittest.TestCase):
                   "https://youtu.be/rzVhPTSNWnE",
                   "https://www.youtube.com/shorts/rzVhPTSNWnE"):
             e = render._youtube_embed(u)
-            self.assertIn('data-id="rzVhPTSNWnE"', e)            # 门面携带 video id
+            self.assertIn('data-yt="rzVhPTSNWnE"', e)            # 门面携带 video id
             self.assertIn("i.ytimg.com/vi/rzVhPTSNWnE", e)       # 缩略图封面
 
     def test_youtube_embed_empty_for_non_youtube(self):
