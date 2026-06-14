@@ -180,7 +180,7 @@ def _head(title):
 
 # ---------- 首页：来源卡片总览 ----------
 
-def _render_home(items, descriptions, out):
+def _render_home(items, descriptions, methods, out):
     # 聚合每个来源：条数 + 最近更新（items 已按 fetched_at DESC，首见即最新）+ 分类
     stats = {}
     for it in items:
@@ -205,9 +205,14 @@ def _render_home(items, descriptions, out):
         desc = descriptions.get(lbl, "")
         blob = _e(f"{lbl} {desc}".lower())
         desc_html = f'<p class="mt-1.5 text-sm leading-relaxed text-zinc-500">{_e(desc)}</p>' if desc else ""
+        m = methods.get(lbl, "")
+        badge = (f'<span class="rounded px-1.5 py-0.5 font-medium bg-amber-100 text-amber-700" '
+                 f'title="入口B:无 RSS,须在 Claude 会话里抓取(绑本地 Chrome / cookie),不能无人值守 cron">'
+                 f'入口B·{_e(m)}</span>') if m else ""
         return f'''        <a href="{_e(_feed_href(lbl))}" class="src-card flex flex-col rounded-xl border border-zinc-200 bg-white p-4 transition hover:border-blue-300 hover:shadow-sm" data-text="{blob}">
           <div class="flex items-center gap-2 text-xs">
             <span class="rounded px-1.5 py-0.5 font-medium {chip}">{icon} {_e(cat)}</span>
+            {badge}
             <span class="ml-auto text-zinc-400">{s["count"]} 条</span>
           </div>
           <div class="mt-2 flex items-center gap-2">{_favicon(lbl)}<h3 class="font-semibold text-zinc-800">{_e(lbl)}</h3></div>
@@ -243,6 +248,9 @@ def _render_home(items, descriptions, out):
     </div>
   </header>
   <main class="mx-auto max-w-5xl px-4 py-6">
+    <p class="mb-5 text-xs text-zinc-400">
+      带 <span class="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">入口B</span> 标识的来源无 RSS,须在本地 Claude 会话里抓取(绑登录态 Chrome / cookie,不能无人值守);其余来源由 Python 脚本自动抓取。
+    </p>
 {body}
   </main>
 {_HOME_SCRIPT}
@@ -401,8 +409,9 @@ def _render_detail(item, out, descriptions):
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
-def render_site(items, interactions=None, descriptions=None, icons=None, out_dir=None):
+def render_site(items, interactions=None, descriptions=None, icons=None, out_dir=None, methods=None):
     """interactions: {source_id: 'detail'|'link'}；descriptions/icons: {source_label: 说明/头像路径}。
+    methods: {source_label: 抓取方式}，入口 B（browser-use/Jina/twitter-cli）非空、入口 A 空。
     首页=来源卡片；feed.html=单来源列表；link 模式的源条目直跳原链、不生成详情页。"""
     global _ICONS
     interactions = interactions or {}
@@ -412,7 +421,7 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
     (out / "sources.html").unlink(missing_ok=True)  # 旧来源页已并入首页
-    _render_home(items, descriptions, out)
+    _render_home(items, descriptions, methods or {}, out)
     _render_feed(items, interactions, out)
     for it in items:
         if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":

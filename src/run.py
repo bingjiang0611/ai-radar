@@ -75,7 +75,11 @@ def main():
         interactions = {s["id"]: s.get("open", "detail") for s in srcs}
         descriptions = {s["source_label"]: s.get("description", "") for s in srcs}
         icons = {s["source_label"]: content.fetch_favicon(s["url"]) for s in srcs if s.get("enabled")}
-        out = render_site(items, interactions, descriptions, icons)
+        # 入口 B（parser=browser，须 Claude 会话抓取）标抓取方式;入口 A（Python 自动抓）留空不标
+        methods = {s["source_label"]: ("" if s["parser"] != "browser"
+                                       else {"jina": "Jina", "twitter-cli": "twitter-cli"}.get(s.get("fetch"), "browser-use"))
+                   for s in srcs}
+        out = render_site(items, interactions, descriptions, icons, methods=methods)
         print(f"🖼  已渲染 → {out}（{len(items)} 条，头像 {sum(1 for v in icons.values() if v)} 个）")
 
 
