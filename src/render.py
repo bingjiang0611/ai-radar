@@ -13,9 +13,11 @@
 import html
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
+
+from store import _parse_dt  # 统一时间解析(兼容 ISO 与 RFC822 pubDate)
 
 # 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
@@ -397,8 +399,17 @@ def _safe_url(url):
     return u if u.lower().startswith(("http://", "https://")) else "#"
 
 
+_MIN_DT = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _effective_dt(item):
+    """条目的有效时间:优先发布时间(published_at,兼容 RFC822),无则退抓取时间。用于排序/分组/显示三处一致。"""
+    return _parse_dt(item.get("published_at")) or _parse_dt(item.get("fetched_at")) or _MIN_DT
+
+
 def _day(item):
-    return (item.get("fetched_at") or "")[:10] or "未知日期"
+    dt = _effective_dt(item)
+    return dt.strftime("%Y-%m-%d") if dt != _MIN_DT else "未知日期"
 
 
 def _feed_href(label):
@@ -438,11 +449,12 @@ def _fmt_md(s):
 
 
 def _fmt_time(item):
-    """published_at 有时间则 'MM-DD · HH:MM'，否则只 'MM-DD'。"""
-    p = item.get("published_at") or ""
-    d = _fmt_md(p) or _fmt_md(item.get("fetched_at"))
-    m = re.search(r"T(\d{2}:\d{2})", p)
-    return f"{d} · {m.group(1)}" if m and d else d
+    """有效时间 → 'MM-DD'，带具体时刻则 'MM-DD · HH:MM'(兼容 ISO 与 RFC822)。"""
+    dt = _effective_dt(item)
+    if dt == _MIN_DT:
+        return ""
+    s = dt.strftime("%m-%d")
+    return f"{s} · {dt.strftime('%H:%M')}" if (dt.hour or dt.minute) else s
 
 
 def _weekday(date_str):
@@ -518,7 +530,7 @@ def _render_home(items, descriptions, methods, interactions, out):
         title = lead.get("title_zh") or lead.get("title") or ""
         summ = lead.get("summary_zh") or lead.get("summary") or ""
         rt = _read_time(lead.get("content_html", ""))
-        when = _fmt_md(lead.get("published_at")) or _fmt_md(lead.get("fetched_at"))
+        when = _fmt_md(_day(lead))
         when_html = f'{_e(when)}{" · " + rt if rt else ""}'
         summ_html = f'<p>{_e(summ)}</p>' if summ else ""
         title_en = lead.get("title") or ""

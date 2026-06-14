@@ -10,6 +10,7 @@ ai-radar 不调 x-operator 的脚本,只调 `twitter` 这个二进制(同 gh/yt-
 列表里常混非 AI 推文 → 用 AI 关键词过滤,只留命中的(和资讯源去噪一致)。
 """
 
+import html
 import json
 import re
 import subprocess
@@ -28,7 +29,8 @@ _TCO = re.compile(r"https?://t\.co/\S+")  # 推文末尾的媒体/引用短链�
 
 
 def _clean_text(text):
-    return _TCO.sub("", (text or "").replace("\n", " ")).strip()
+    # Twitter API 文本是 HTML 转义的(&gt;/&amp;/&#8217;)→ 先 unescape 再去 t.co,否则页面显示字面实体
+    return _TCO.sub("", html.unescape(text or "").replace("\n", " ")).strip()
 
 
 def is_reply(t):

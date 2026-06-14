@@ -131,11 +131,14 @@ def purge_old(days=7, conn=None):
 
 
 def all_items(conn=None):
-    """全部条目，最新在前。"""
+    """全部条目，按发布时间(published_at，兼容 RFC822；无则退 fetched_at)倒序——最新发布在前。"""
     c = conn or _conn()
     init_db(c)
-    rows = c.execute("SELECT * FROM items ORDER BY fetched_at DESC, id DESC").fetchall()
+    rows = c.execute("SELECT * FROM items").fetchall()
     out = [dict(r) for r in rows]
     if conn is None:
         c.close()
+    _min = datetime.min.replace(tzinfo=timezone.utc)
+    out.sort(key=lambda r: ((_parse_dt(r["published_at"]) or _parse_dt(r["fetched_at"]) or _min), r["id"]),
+             reverse=True)
     return out

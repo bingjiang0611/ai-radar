@@ -4,6 +4,7 @@
 抓取（网络）与解析（纯函数）分离：parse_*_text 不碰网络，便于单测。
 """
 
+import html
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -12,9 +13,11 @@ from fetch import fetch
 
 
 def _clean(text, limit=280):
-    """去 HTML 标签、压空白、截断。"""
+    """去 HTML 标签、压空白、截断。先 html.unescape 解掉双重转义实体(Twitter/部分 feed 返回的文本
+    已是 HTML 转义的,ET 解一层后仍残留 &#8217;/&gt; 等),再剥标签——否则渲染层 escape 会显示字面实体。"""
     if not text:
         return ""
+    text = html.unescape(text)            # 双重转义实体 → 真字符(露出的假标签下一步被剥掉)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:limit]

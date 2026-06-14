@@ -19,7 +19,7 @@ wrangler pages deploy ./dist                      # 部署（需先 wrangler 登
 
 需要 `python3` + `curl`（macOS 自带）+ `nh3`（唯一 pip 依赖，安全清洗外站正文）。
 - 正文：feed 自带全文（清洗后站内展示），图片下载进 `dist/img/`（防丢失），点「打开原文」才外跳。
-- retention：只保留近 30 天条目，每次抓取顺带清理过期条目和无引用图片。
+- retention：只保留近 7 天条目（按发布时间 published_at，无日期退回抓取时间），每次抓取顺带清理过期条目和无引用图片。
 
 ## 加信息源
 
@@ -27,5 +27,5 @@ wrangler pages deploy ./dist                      # 部署（需先 wrangler 登
 
 ## 现状
 
-第一刀：RSS/JSON 抓取 → SQLite 去重 → 静态 feed 站。
-待做：Twitter 列表抓取（browser-use，须在 Claude 会话里跑）、标题/摘要中译、条目详情页 + 全文翻译回填、公开部署。
+已实现：RSS/JSON 抓取 → SQLite 去重 → 静态站（来源总览 + 时间流 + 条目详情页）；X/Twitter 列表抓取（twitter-cli，须在 Claude 会话里跑）；标题/摘要中译；JS 站点正文 Jina/直连兜底；视频 YouTube/B站门面。
+待做：全文翻译回填（人工挑选条目）、公开部署（wrangler pages）。
