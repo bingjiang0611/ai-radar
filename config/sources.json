@@ -216,7 +216,7 @@
       "source_label": "MIT Tech Review",
       "category": "资讯",
       "parser": "rss",
-      "url": "https://www.technologyreview.com/feed/",
+      "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
       "enabled": true,
       "limit": 6,
       "description": "《麻省理工科技评论》,权威深度的前沿科技与 AI 报道"
@@ -232,54 +232,14 @@
       "description": "VentureBeat 的 AI 频道,侧重企业级 AI 应用与商业落地"
     },
     {
-      "id": "zdnet-ai",
-      "source_label": "ZDNet AI",
-      "category": "资讯",
-      "parser": "rss",
-      "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
-      "enabled": true,
-      "limit": 6,
-      "description": "ZDNet 的 AI 报道,面向企业 IT 决策者的实用视角"
-    },
-    {
-      "id": "cnet-ai",
-      "source_label": "CNET AI",
-      "category": "资讯",
-      "parser": "rss",
-      "url": "https://www.cnet.com/rss/news/",
-      "enabled": true,
-      "limit": 6,
-      "description": "CNET 的 AI 报道,面向普通消费者的产品与应用解读"
-    },
-    {
       "id": "techradar-ai",
       "source_label": "TechRadar AI",
       "category": "资讯",
       "parser": "rss",
-      "url": "https://www.techradar.com/rss",
+      "url": "https://www.techradar.com/feeds/tag/artificial-intelligence",
       "enabled": true,
       "limit": 6,
       "description": "TechRadar 的 AI 频道,产品测评与上手指南"
-    },
-    {
-      "id": "scientific-american",
-      "source_label": "Scientific American",
-      "category": "资讯",
-      "parser": "rss",
-      "url": "https://www.scientificamerican.com/platform/syndication/rss/",
-      "enabled": true,
-      "limit": 6,
-      "description": "《科学美国人》,历史悠久的严谨科普,含 AI 与计算专题"
-    },
-    {
-      "id": "bloomberg-tech",
-      "source_label": "Bloomberg Technology",
-      "category": "资讯",
-      "parser": "rss",
-      "url": "https://feeds.bloomberg.com/technology/news.rss",
-      "enabled": true,
-      "limit": 6,
-      "description": "彭博科技频道,资本与商业视角的科技/AI 深度报道"
     },
     {
       "id": "marktechpost",
@@ -306,10 +266,10 @@
       "source_label": "Hacker News",
       "category": "资讯",
       "parser": "rss",
-      "url": "https://hnrss.org/frontpage",
+      "url": "https://hnrss.org/newest?q=AI+OR+LLM+OR+OpenAI+OR+Anthropic+OR+GPT&points=80",
       "enabled": true,
       "limit": 6,
-      "description": "Hacker News 首页(YC 社区),技术圈每天热议的项目、文章与讨论"
+      "description": "Hacker News(YC 社区)AI 相关高赞讨论(按 AI/LLM/OpenAI 等关键词 + ≥80 赞过滤)"
     },
     {
       "id": "arxiv-cs-ai",
