@@ -355,13 +355,19 @@ if(copy)copy.addEventListener('click',function(){var s=copy.querySelector('span'
 var bar=document.getElementById('progress');
 if(bar)window.addEventListener('scroll',function(){var h=document.documentElement,max=h.scrollHeight-h.clientHeight;
   bar.style.width=(max>0?(h.scrollTop/max*100):0)+'%';},{passive:true});
-var f=document.getElementById('facade');
-if(f)f.addEventListener('click',function(){var id=f.dataset.id;if(!/^[\\w-]{11}$/.test(id))return;
-  var ifr=document.createElement('iframe');
-  ifr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:16px';
-  ifr.allow='accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture';
-  ifr.allowFullscreen=true;ifr.src='https://www.youtube.com/embed/'+id+'?autoplay=1';
-  f.replaceWith(ifr);},{once:true});
+[].slice.call(document.querySelectorAll('.facade')).forEach(function(f){
+  f.addEventListener('click',function(){
+    var yt=f.dataset.yt,bv=f.dataset.bv,url='';
+    if(yt&&/^[\\w-]{11}$/.test(yt))url='https://www.youtube.com/embed/'+yt+'?autoplay=1';
+    else if(bv&&/^BV[0-9A-Za-z]+$/.test(bv))url='https://player.bilibili.com/player.html?isOutside=true&bvid='+bv+'&autoplay=1&danmaku=0';
+    else return;
+    var ifr=document.createElement('iframe');
+    ifr.style.cssText='width:100%;aspect-ratio:16/9;border:0;border-radius:16px;display:block';
+    ifr.allow='accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture';
+    ifr.allowFullscreen=true;ifr.src=url;
+    f.replaceWith(ifr);
+  },{once:true});
+});
 """
 
 
@@ -670,17 +676,40 @@ def _tr_empty(kind="文章"):
             '<p class="why">挑中后 → markitdown 取正文 → 精翻 → 此处切换为译文</p></div>')
 
 
+_BV_RE = re.compile(r"(BV[0-9A-Za-z]+)")
+
+
+def _bili_bv(url):
+    m = _BV_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
+def _facade(cover, src, badge, data_attr, hint="点击播放"):
+    """通用 lite 门面：封面 + 播放钮 + 角标;点击才由 _DETAIL_JS 挂 iframe（data-yt / data-bv）。"""
+    return (f'<div class="facade" {data_attr}>'
+            f'<img class="thumb" src="{cover}" alt="" loading="lazy">'
+            f'<div class="hint">{hint}</div>'
+            f'<div class="play"><span class="pbtn">{_PLAY_SVG}</span></div>'
+            f'<div class="ov"><span class="dotmark">{_e(_monogram(src))}</span>'
+            f'<div><div class="nm">{_e(src)}</div><div class="sub2">{badge}</div></div></div></div>')
+
+
 def _youtube_embed(url, src=""):
-    """YouTube 门面：缩略图封面 + 播放钮 + 频道名;点击才由 _DETAIL_JS 挂 iframe（无注入）。无 vid → ""。"""
+    """YouTube 门面;点击才挂 iframe（无注入）。无 vid → ""。"""
     vid = _yt_id(url)
     if not vid:
         return ""
-    return (f'<div class="facade" id="facade" data-id="{vid}">'
-            f'<img class="thumb" src="https://i.ytimg.com/vi/{vid}/hqdefault.jpg" alt="" loading="lazy">'
-            f'<div class="hint">点击播放</div>'
-            f'<div class="play"><span class="pbtn">{_PLAY_SVG}</span></div>'
-            f'<div class="ov"><span class="dotmark">{_e(_monogram(src))}</span>'
-            f'<div><div class="nm">{_e(src)}</div><div class="sub2">YouTube</div></div></div></div>')
+    return _facade(f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", src, "YouTube", f'data-yt="{vid}"')
+
+
+def _bili_embed(bili_url, yt_url, src=""):
+    """B站门面(中文翻译搬运):用 YouTube 同片封面 + 哔哩哔哩角标;点击挂 player.bilibili.com。无 BV → ""。"""
+    bv = _bili_bv(bili_url)
+    if not bv:
+        return ""
+    vid = _yt_id(yt_url)
+    cover = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
+    return _facade(cover, src, "哔哩哔哩 · 中文翻译", f'data-bv="{bv}"', hint="中文翻译 · 点击播放")
 
 
 def _tabs(item):
@@ -724,6 +753,15 @@ def _render_detail(item, out, descriptions):
         sub_html = f'<p class="subtitle" style="font-style:normal;font-size:14.5px;color:var(--muted)">{_e(subtitle)}</p>' if subtitle else ""
         desc = item.get("summary_zh") or item.get("summary") or ""
         desc_panel = f'<p>{_e(desc)}</p>' if desc else '<p style="color:var(--muted)">本条视频默认只抓标题与链接;点上方封面在站内播放,或「在 YouTube 打开」。</p>'
+        # 已翻译搬运到 B站(video_url 存 bilibili 链接)→ 「中文翻译」tab 放可站内播放的 B站门面
+        bili = _bili_embed(item.get("video_url", ""), raw_url, src)
+        if bili:
+            zh_label = "中文翻译"
+            zh_panel = (bili + '<p style="margin-top:14px;font-size:13px;color:var(--muted)">本视频已翻译并搬运至 '
+                        f'<a href="{_safe_url(item.get("video_url",""))}" target="_blank" rel="noopener" '
+                        'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点上方封面在站内播放中文翻译版。</p>')
+        else:
+            zh_label, zh_panel = "中文字幕", _tr_empty("视频")
         body = (f'<main class="wrap {cat_cls}">{facade}'
                 f'<div style="margin-top:22px"></div>'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
@@ -731,9 +769,9 @@ def _render_detail(item, out, descriptions):
                 f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}在 YouTube 打开</a>'
                 f'<button class="btn" id="copy" data-url="{_e(raw_url)}">{_COPY_SVG}<span>复制链接</span></button></div>'
                 f'<div class="tabs"><button class="tab on" data-panel="p-desc">简介</button>'
-                f'<button class="tab" data-panel="p-zh">中文字幕</button></div>'
+                f'<button class="tab" data-panel="p-zh">{zh_label}</button></div>'
                 f'<section class="panel on doc" id="p-desc">{desc_panel}</section>'
-                f'<section class="panel" id="p-zh">{_tr_empty("视频")}</section></main>')
+                f'<section class="panel" id="p-zh">{zh_panel}</section></main>')
         progress = ""
     else:
         # ---- 文章态 ----
