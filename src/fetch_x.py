@@ -14,6 +14,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -22,6 +23,9 @@ import content                                          # noqa: E402
 from store import insert_items, url_hash, hash_exists   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+
+SINCE_HOURS = 24   # 只收最近 24 小时的推文(可被源里 window_hours 覆盖)
+FETCH_N = 200      # twitter-cli 单次抓取上限 ~200;最活跃列表 24h 超 200 条仍会截断(告警提示)
 
 # 英文按词边界(避免 "ai" 命中 "said"),中文按子串。
 _AI_EN = re.compile(
@@ -53,7 +57,7 @@ def first_json(text):
 def fetch_list(list_id, n):
     r = subprocess.run(
         ["twitter", "list", list_id, "-n", str(n), "--json"],
-        capture_output=True, encoding="utf-8", errors="replace", timeout=180,
+        capture_output=True, encoding="utf-8", errors="replace", timeout=300,
     )
     obj = first_json(r.stdout)
     if isinstance(obj, dict):
@@ -97,10 +101,19 @@ def main():
         print(f"源 url 不是 X 列表(应含 /lists/<id>):{src['url']}", file=sys.stderr)
         return 2
     list_id = m.group(1)
-    limit = src.get("limit", 20)
+    hours = src.get("window_hours", SINCE_HOURS)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    raw = fetch_list(list_id, limit * 3)  # 多抓,过滤后保量
-    ai = [t for t in raw if is_ai(t.get("text", "") or "")]
+    def in_window(t):
+        ts = t.get("createdAtISO") or t.get("createdAt") or ""
+        try:
+            return datetime.fromisoformat(ts) >= cutoff
+        except ValueError:
+            return False  # 解析不出时间 → 不能确认在窗内,排除
+
+    raw = fetch_list(list_id, FETCH_N)
+    recent = [t for t in raw if in_window(t)]          # 先卡 24h 时间窗
+    ai = [t for t in recent if is_ai(t.get("text", "") or "")]
     items, seen = [], set()
     for t in ai:
         it = to_item(t)
@@ -109,10 +122,12 @@ def main():
         seen.add(it["url"])
         it["content_html"] = ""
         items.append(it)
-        if len(items) >= limit:
-            break
     n = insert_items(items, src)
-    print(f"{src['source_label']}: 列表 {list_id} 抓 {len(raw)} 条,AI 命中 {len(ai)},新增 {n}")
+    # 最旧一条仍落在窗口内 → FETCH_N 把时间窗截断了,可能漏掉更早但仍在 24h 内的推
+    capped = bool(raw) and in_window(raw[-1])
+    print(f"{src['source_label']}: 列表 {list_id} 抓 {len(raw)} 条,{hours}h 内 {len(recent)},"
+          f"AI 命中 {len(ai)},新增 {n}"
+          + (f"  ⚠️ 最旧一条仍在 {hours}h 内,-n {FETCH_N} 可能截断时间窗有遗漏(调大 FETCH_N)" if capped else ""))
     return 0
 
 

@@ -90,7 +90,9 @@ _FEED_SCRIPT = """
   function apply() {
     const q = ((searchEl && searchEl.value) || '').trim().toLowerCase();
     items.forEach(el => {
-      const ok = (!src || el.dataset.source === src) && (!q || el.dataset.text.includes(q));
+      // 时间流(无 source):排除「推文」分类,避免 X 列表的高频推文淹没主流;推文只在其来源卡片里看
+      const inFeed = src ? el.dataset.source === src : el.dataset.category !== '推文';
+      const ok = inFeed && (!q || el.dataset.text.includes(q));
       el.style.display = ok ? '' : 'none';
     });
     document.querySelectorAll('.day-section').forEach(sec => {
