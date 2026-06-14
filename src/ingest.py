@@ -46,13 +46,17 @@ def main():
         print("条目应为数组", file=sys.stderr)
         return 2
 
+    detail = src.get("open", "detail") == "detail"  # detail 源:无正文则用 Jina 抓正文进站
     new = []
     for r in rows:
         if not isinstance(r, dict) or not r.get("url") or not r.get("title"):
             continue
         if hash_exists(url_hash(r["url"])):
             continue
-        r["content_html"] = content.process(r.get("content", "") or "")
+        body = r.get("content", "") or ""
+        if not body and detail:
+            body = content.fetch_article_html(r["url"])
+        r["content_html"] = content.process(body)
         new.append(r)
     n = insert_items(new, src)
     print(f"{src['source_label']}: 收到 {len(rows)} 条, 新增 {n}")

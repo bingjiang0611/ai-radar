@@ -109,7 +109,7 @@
       "enabled": true,
       "limit": 10,
       "description": "Claude 背后公司 Anthropic 的研究博客,聚焦对齐(alignment)、可解释性等 AI 安全研究",
-      "open": "link"
+      "open": "detail"
     },
     {
       "id": "google-deepmind",
@@ -349,7 +349,7 @@
       "url": "https://www.anthropic.com/news",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "Anthropic 官方新闻室,Claude 产品发布、合作与公司公告"
     },
     {
@@ -361,7 +361,7 @@
       "url": "https://suno.com/blog",
       "enabled": true,
       "limit": 6,
-      "open": "link",
+      "open": "detail",
       "description": "Suno,文本生成音乐的 AI 产品,官方博客发布模型与功能更新"
     },
     {
@@ -373,7 +373,7 @@
       "url": "https://www.microsoft.com/en-us/research/blog/",
       "enabled": true,
       "limit": 6,
-      "open": "link",
+      "open": "detail",
       "description": "微软研究院博客,AI、系统与理论的前沿研究"
     },
     {
@@ -385,7 +385,7 @@
       "url": "https://www.deeplearning.ai/the-batch/",
       "enabled": true,
       "limit": 6,
-      "open": "link",
+      "open": "detail",
       "description": "The Batch(DeepLearning.AI / 吴恩达),每周 AI 要闻精选与评论"
     },
     {
@@ -420,7 +420,7 @@
       "url": "https://ai.meta.com/blog/",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "Meta AI(FAIR)官方博客,LLaMA、Segment Anything 等开源模型与基础研究"
     },
     {
@@ -431,7 +431,7 @@
       "url": "https://cursor.com/blog",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "AI 代码编辑器 Cursor(Anysphere 出品)的官方博客,产品更新与编码 agent 研究"
     },
     {
@@ -442,7 +442,7 @@
       "url": "https://runwayml.com/research",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "AI 视频生成公司 Runway 的研究博客,Gen 系列视频模型与通用世界模型"
     },
     {
@@ -453,7 +453,7 @@
       "url": "https://stability.ai/news",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "Stable Diffusion 背后的 Stability AI 官方动态,开源图像/音频生成模型"
     },
     {
@@ -464,7 +464,7 @@
       "url": "https://cohere.com/blog",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "面向企业的大模型公司 Cohere 的博客,Command 系列模型、RAG 与企业级 AI"
     },
     {
@@ -475,7 +475,7 @@
       "url": "https://lmsys.org/blog",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "LMSYS 组织(Chatbot Arena 排行榜、SGLang 推理引擎)的博客,模型评测与高性能推理"
     },
     {
@@ -666,7 +666,7 @@
       "url": "https://claude.com/blog",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "Anthropic 官方博客,Agents / Claude 平台 / Claude Code 相关文章"
     },
     {
@@ -677,7 +677,7 @@
       "url": "https://www.anthropic.com/engineering",
       "enabled": true,
       "limit": 8,
-      "open": "link",
+      "open": "detail",
       "description": "Anthropic 工程团队深度文章(building effective agents、context engineering 等)"
     }
   ]

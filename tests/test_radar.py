@@ -157,6 +157,22 @@ class TestContent(unittest.TestCase):
         html_in = '<img src="/local.png">'
         self.assertEqual(content.localize_images(html_in), html_in)
 
+    def test_md_to_html_blocks(self):
+        md = ("Title: T\n\nMarkdown Content:\n"
+              "# H1\n\npara **bold** and [lk](https://x.com)\n\n- a\n- b\n\n"
+              "![alt](https://i/p.png)\n\n> quote")
+        out = content.md_to_html(md)
+        self.assertNotIn("Markdown Content:", out)              # 头部元信息已剥
+        self.assertIn("<h1>H1</h1>", out)
+        self.assertIn("<strong>bold</strong>", out)
+        self.assertIn('<a href="https://x.com">lk</a>', out)
+        self.assertIn("<li>a</li>", out)
+        self.assertIn('<img src="https://i/p.png"', out)
+        self.assertIn("<blockquote>quote</blockquote>", out)
+
+    def test_md_to_html_escapes_html(self):
+        self.assertIn("&lt;script&gt;", content.md_to_html("a <script> b"))
+
 
 class TestRetention(unittest.TestCase):
     def setUp(self):

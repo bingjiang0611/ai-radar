@@ -8,6 +8,7 @@
 import hashlib
 import re
 import subprocess
+from html import escape as _escape
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -103,6 +104,102 @@ def localize_images(html):
 def process(html):
     """清洗 + 图片进站，返回可直接渲染的安全 HTML。只对新条目调用（含网络下载）。"""
     return localize_images(sanitize(html))
+
+
+# ---------- 入口B 正文：Jina 取正文 markdown → HTML（站内详情页用）----------
+
+_MD_IMG = re.compile(r'!\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)')
+_MD_LINK = re.compile(r'\[([^\]]+)\]\((\S+?)(?:\s+"[^"]*")?\)')
+_MD_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+_MD_CODE = re.compile(r"`([^`]+)`")
+
+
+def _md_inline(text):
+    text = _escape(text)  # 先转义,markdown 标记(*[]()`)不受影响,正则仍可匹配
+    text = _MD_IMG.sub(r'<img src="\2" alt="\1">', text)
+    text = _MD_LINK.sub(r'<a href="\2">\1</a>', text)
+    text = _MD_BOLD.sub(r"<strong>\1</strong>", text)
+    text = _MD_CODE.sub(r"<code>\1</code>", text)
+    return text
+
+
+def md_to_html(md):
+    """极简 markdown → HTML：覆盖 Jina readability 输出的常见块（标题/段落/列表/图片/链接/
+    引用/代码/分隔线）。产物再交给 process() 走 nh3 清洗 + 图片进站，故无需自身完备/绝对安全。"""
+    if not md:
+        return ""
+    idx = md.find("Markdown Content:")  # 剥掉 Jina 头部元信息(Title/URL Source/Published Time)
+    if idx != -1:
+        md = md[idx + len("Markdown Content:"):]
+    out, para, in_list = [], [], [None]
+
+    def flush():
+        if para:
+            out.append("<p>" + _md_inline(" ".join(para)) + "</p>")
+            para.clear()
+
+    def close_list():
+        if in_list[0]:
+            out.append(f"</{in_list[0]}>")
+            in_list[0] = None
+
+    lines = md.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        if line.startswith("```"):
+            flush(); close_list(); i += 1; code = []
+            while i < len(lines) and not lines[i].startswith("```"):
+                code.append(lines[i]); i += 1
+            i += 1
+            out.append("<pre><code>" + _escape("\n".join(code)) + "</code></pre>")
+            continue
+        if not line.strip():
+            flush(); close_list(); i += 1; continue
+        h = re.match(r"(#{1,6})\s+(.*)", line)
+        if h:
+            flush(); close_list()
+            lvl = len(h.group(1))
+            out.append(f"<h{lvl}>{_md_inline(h.group(2))}</h{lvl}>"); i += 1; continue
+        if re.fullmatch(r"(\s*[-*_]){3,}\s*", line):
+            flush(); close_list(); out.append("<hr>"); i += 1; continue
+        if line.startswith(">"):
+            flush(); close_list()
+            out.append("<blockquote>" + _md_inline(line.lstrip("> ")) + "</blockquote>"); i += 1; continue
+        m = re.match(r"\s*[-*+]\s+(.*)", line)
+        if m:
+            flush()
+            if in_list[0] != "ul":
+                close_list(); out.append("<ul>"); in_list[0] = "ul"
+            out.append("<li>" + _md_inline(m.group(1)) + "</li>"); i += 1; continue
+        m = re.match(r"\s*\d+\.\s+(.*)", line)
+        if m:
+            flush()
+            if in_list[0] != "ol":
+                close_list(); out.append("<ol>"); in_list[0] = "ol"
+            out.append("<li>" + _md_inline(m.group(1)) + "</li>"); i += 1; continue
+        close_list()
+        para.append(line.strip())
+        i += 1
+    flush(); close_list()
+    return "\n".join(out)
+
+
+def fetch_article_html(url, timeout=60):
+    """用 Jina 默认模式取单篇正文 → md_to_html。失败/被 Cloudflare 挡 → 返回 ""（详情页回退到「打开原文」）。"""
+    if not url:
+        return ""
+    try:
+        r = subprocess.run(
+            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", str(timeout - 5), f"https://r.jina.ai/{url}"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+        )
+    except Exception:  # noqa: BLE001
+        return ""
+    md = r.stdout or ""
+    if r.returncode != 0 or len(md) < 80 or "Just a moment" in md[:500]:
+        return ""
+    return md_to_html(md)
 
 
 def gc_images(html_blobs):
