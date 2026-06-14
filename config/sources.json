@@ -353,6 +353,42 @@
       "description": "Anthropic 官方新闻室,Claude 产品发布、合作与公司公告"
     },
     {
+      "id": "suno",
+      "source_label": "Suno",
+      "category": "产品",
+      "parser": "browser",
+      "fetch": "jina",
+      "url": "https://suno.com/blog",
+      "enabled": true,
+      "limit": 6,
+      "open": "link",
+      "description": "Suno,文本生成音乐的 AI 产品,官方博客发布模型与功能更新"
+    },
+    {
+      "id": "microsoft-research",
+      "source_label": "Microsoft Research",
+      "category": "研究",
+      "parser": "browser",
+      "fetch": "jina",
+      "url": "https://www.microsoft.com/en-us/research/blog/",
+      "enabled": true,
+      "limit": 6,
+      "open": "link",
+      "description": "微软研究院博客,AI、系统与理论的前沿研究"
+    },
+    {
+      "id": "the-batch",
+      "source_label": "The Batch",
+      "category": "Newsletter",
+      "parser": "browser",
+      "fetch": "jina",
+      "url": "https://www.deeplearning.ai/the-batch/",
+      "enabled": true,
+      "limit": 6,
+      "open": "link",
+      "description": "The Batch(DeepLearning.AI / 吴恩达),每周 AI 要闻精选与评论"
+    },
+    {
       "id": "meta-ai",
       "source_label": "Meta AI",
       "category": "研究",
