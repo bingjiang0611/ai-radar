@@ -8,7 +8,7 @@
       "url": "https://importai.substack.com/feed",
       "enabled": true,
       "limit": 10,
-      "description": "Jack Clark 的 AI 政策与前沿通讯"
+      "description": "Anthropic 联合创始人、前 OpenAI 政策主管 Jack Clark 的周更通讯,深度梳理 AI 前沿研究、政策与产业动向"
     },
     {
       "id": "interconnects",
@@ -18,7 +18,7 @@
       "url": "https://www.interconnects.ai/feed",
       "enabled": true,
       "limit": 10,
-      "description": "Nathan Lambert 的模型训练/RL 研究"
+      "description": "Allen AI(AI2)研究科学家 Nathan Lambert 的通讯,专注后训练、RLHF/RL 与开源模型生态"
     },
     {
       "id": "nlp-newsletter",
@@ -28,7 +28,7 @@
       "url": "https://nlp.elvissaravia.com/feed",
       "enabled": true,
       "limit": 10,
-      "description": "Elvis Saravia 的 NLP/LLM 通讯"
+      "description": "DAIR.AI 创始人 Elvis Saravia 的通讯,精选 NLP/LLM 重要论文、教程与工具"
     },
     {
       "id": "latent-space",
@@ -38,7 +38,7 @@
       "url": "https://www.latent.space/feed",
       "enabled": true,
       "limit": 10,
-      "description": "AI 工程实践通讯"
+      "description": "swyx(Shawn Wang)主理的 AI 工程社区(播客+通讯),面向把大模型落地的工程师"
     },
     {
       "id": "bensbites",
@@ -48,7 +48,7 @@
       "url": "https://www.bensbites.com/feed",
       "enabled": true,
       "limit": 10,
-      "description": "AI 每日资讯精选"
+      "description": "Ben Tossell 创办的 AI 日报,覆盖面最广的每日 AI 资讯精选,适合快速扫行业动态"
     },
     {
       "id": "lex-fridman-yt",
@@ -58,7 +58,7 @@
       "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCSHZKyawb77ixDdsGog4iWA",
       "enabled": true,
       "limit": 10,
-      "description": "Lex Fridman 长访谈（视频）"
+      "description": "MIT 研究员、知名播客主持人 Lex Fridman 的 YouTube;以数小时长访谈深聊 AI、科学、技术与各领域顶尖人物"
     },
     {
       "id": "xyz-42zhang",
@@ -69,7 +69,7 @@
       "enabled": true,
       "limit": 10,
       "open": "link",
-      "description": "42章经：AI 与创投对谈"
+      "description": "投资人曲凯主持的播客「42章经」,与一线 AI 创业者、投资人对谈商业逻辑与创投趋势"
     },
     {
       "id": "xyz-zhangxiaojun",
@@ -80,7 +80,7 @@
       "enabled": true,
       "limit": 10,
       "open": "link",
-      "description": "张小珺：商业访谈录"
+      "description": "资深科技记者张小珺的「商业访谈录」,长谈中外 AI/科技行业的关键人物与公司战略"
     },
     {
       "id": "hf-weekly-papers",
@@ -98,7 +98,7 @@
         "content": "paper.summary"
       },
       "_note": "?week={week} 自动取当前 ISO 周(由 resolve_url 替换),返回该周 upvotes top 50;每日榜用 https://huggingface.co/api/daily_papers",
-      "description": "Hugging Face 社区本周热门论文"
+      "description": "Hugging Face 社区每周投票最高的热门论文榜,反映研究者当下最关注的工作"
     },
     {
       "id": "anthropic-research",
@@ -108,7 +108,7 @@
       "url": "https://www.anthropic.com/research",
       "enabled": true,
       "limit": 10,
-      "description": "Claude 背后的研究",
+      "description": "Claude 背后公司 Anthropic 的研究博客,聚焦对齐(alignment)、可解释性等 AI 安全研究",
       "open": "link"
     },
     {
@@ -119,7 +119,7 @@
       "url": "https://deepmind.google/blog/rss.xml",
       "enabled": true,
       "limit": 6,
-      "description": "Gemini、AlphaFold 等前沿研究"
+      "description": "Google DeepMind 官方博客,Gemini、AlphaFold 等顶尖 AI 研究与产品"
     },
     {
       "id": "google-research",
@@ -129,7 +129,7 @@
       "url": "https://research.google/blog/rss/",
       "enabled": true,
       "limit": 6,
-      "description": "Google 全线研究"
+      "description": "Google Research 官方博客,覆盖 Google 全线 AI 与计算机科学研究"
     },
     {
       "id": "apple-ml",
@@ -139,7 +139,7 @@
       "url": "https://machinelearning.apple.com/rss.xml",
       "enabled": true,
       "limit": 6,
-      "description": "苹果设备端机器学习"
+      "description": "Apple 机器学习研究博客,聚焦设备端 AI 与隐私保护机器学习"
     },
     {
       "id": "nvidia-ai",
@@ -149,7 +149,7 @@
       "url": "https://blogs.nvidia.com/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "GPU、CUDA 与 AI 应用"
+      "description": "GPU 巨头 NVIDIA 官方博客,CUDA、加速计算与各行业 AI 应用"
     },
     {
       "id": "hf-blog",
@@ -159,7 +159,7 @@
       "url": "https://huggingface.co/blog/feed.xml",
       "enabled": true,
       "limit": 6,
-      "description": "开源模型与工具"
+      "description": "开源 AI 平台 Hugging Face 官方博客,开源模型/数据集/工具与社区动态"
     },
     {
       "id": "mistral",
@@ -169,7 +169,7 @@
       "url": "https://mistral.ai/rss.xml",
       "enabled": true,
       "limit": 6,
-      "description": "欧洲开源大模型"
+      "description": "法国开源大模型公司 Mistral AI 官方动态,Mistral/Mixtral 等模型发布"
     },
     {
       "id": "the-verge-ai",
@@ -179,7 +179,7 @@
       "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
       "enabled": true,
       "limit": 6,
-      "description": "科技媒体 AI 频道"
+      "description": "科技媒体 The Verge 的 AI 频道,面向大众的 AI 新闻与产品评论"
     },
     {
       "id": "techcrunch-ai",
@@ -189,7 +189,7 @@
       "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "创投科技 AI 报道"
+      "description": "创投科技媒体 TechCrunch 的 AI 报道,侧重创业公司、融资与并购"
     },
     {
       "id": "ars-technica-ai",
@@ -199,7 +199,7 @@
       "url": "https://arstechnica.com/ai/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "深度科技报道"
+      "description": "Ars Technica 的 AI 报道,以技术深度与理性分析著称"
     },
     {
       "id": "wired-ai",
@@ -209,7 +209,7 @@
       "url": "https://www.wired.com/feed/tag/ai/latest/rss",
       "enabled": true,
       "limit": 6,
-      "description": "《连线》AI 报道"
+      "description": "《连线》(WIRED)的 AI 报道,关注 AI 对社会、文化与权力的影响"
     },
     {
       "id": "mit-tech-review",
@@ -219,7 +219,7 @@
       "url": "https://www.technologyreview.com/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "深度科技评论"
+      "description": "《麻省理工科技评论》,权威深度的前沿科技与 AI 报道"
     },
     {
       "id": "venturebeat-ai",
@@ -229,7 +229,7 @@
       "url": "https://venturebeat.com/category/ai/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "企业 AI 资讯"
+      "description": "VentureBeat 的 AI 频道,侧重企业级 AI 应用与商业落地"
     },
     {
       "id": "zdnet-ai",
@@ -239,7 +239,7 @@
       "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
       "enabled": true,
       "limit": 6,
-      "description": "企业科技"
+      "description": "ZDNet 的 AI 报道,面向企业 IT 决策者的实用视角"
     },
     {
       "id": "cnet-ai",
@@ -249,7 +249,7 @@
       "url": "https://www.cnet.com/rss/news/",
       "enabled": true,
       "limit": 6,
-      "description": "消费科技"
+      "description": "CNET 的 AI 报道,面向普通消费者的产品与应用解读"
     },
     {
       "id": "techradar-ai",
@@ -259,7 +259,7 @@
       "url": "https://www.techradar.com/rss",
       "enabled": true,
       "limit": 6,
-      "description": "科技测评"
+      "description": "TechRadar 的 AI 频道,产品测评与上手指南"
     },
     {
       "id": "scientific-american",
@@ -269,7 +269,7 @@
       "url": "https://www.scientificamerican.com/platform/syndication/rss/",
       "enabled": true,
       "limit": 6,
-      "description": "科普"
+      "description": "《科学美国人》,历史悠久的严谨科普,含 AI 与计算专题"
     },
     {
       "id": "bloomberg-tech",
@@ -279,7 +279,7 @@
       "url": "https://feeds.bloomberg.com/technology/news.rss",
       "enabled": true,
       "limit": 6,
-      "description": "商业科技"
+      "description": "彭博科技频道,资本与商业视角的科技/AI 深度报道"
     },
     {
       "id": "marktechpost",
@@ -289,7 +289,7 @@
       "url": "https://www.marktechpost.com/feed/",
       "enabled": true,
       "limit": 6,
-      "description": "论文解读"
+      "description": "MarkTechPost,高频发布的 AI 论文解读与模型/产品速递"
     },
     {
       "id": "the-gradient",
@@ -299,7 +299,7 @@
       "url": "https://thegradient.pub/rss/",
       "enabled": true,
       "limit": 6,
-      "description": "深度 AI 评论"
+      "description": "The Gradient,由研究者撰写的深度 AI 评论与综述杂志"
     },
     {
       "id": "hacker-news",
@@ -309,7 +309,7 @@
       "url": "https://hnrss.org/frontpage",
       "enabled": true,
       "limit": 6,
-      "description": "技术社区热点"
+      "description": "Hacker News 首页(YC 社区),技术圈每天热议的项目、文章与讨论"
     },
     {
       "id": "arxiv-cs-ai",
@@ -319,7 +319,7 @@
       "url": "http://export.arxiv.org/rss/cs.AI",
       "enabled": true,
       "limit": 6,
-      "description": "AI 预印本论文"
+      "description": "arXiv 人工智能(cs.AI)分类的最新预印本论文,工作日更新"
     },
     {
       "id": "nature-ml",
@@ -329,7 +329,7 @@
       "url": "https://www.nature.com/subjects/machine-learning.rss",
       "enabled": true,
       "limit": 6,
-      "description": "《自然》机器学习"
+      "description": "《自然》(Nature)机器学习专题,顶级期刊的 ML 与 AI 研究"
     },
     {
       "id": "last-week-in-ai",
@@ -339,7 +339,7 @@
       "url": "https://lastweekin.ai/feed",
       "enabled": true,
       "limit": 6,
-      "description": "每周 AI 摘要"
+      "description": "Last Week in AI,每周梳理 AI 领域大事的摘要通讯"
     },
     {
       "id": "dwarkesh",
@@ -349,7 +349,7 @@
       "url": "https://www.dwarkesh.com/feed",
       "enabled": true,
       "limit": 6,
-      "description": "AI/创业深度访谈"
+      "description": "播客主持人 Dwarkesh Patel 的深度访谈,与 AI、科学、历史领域思想者长谈"
     },
     {
       "id": "lennys-newsletter",
@@ -359,7 +359,7 @@
       "url": "https://www.lennysnewsletter.com/feed",
       "enabled": true,
       "limit": 6,
-      "description": "产品管理"
+      "description": "前 Airbnb 产品负责人 Lenny Rachitsky 的通讯,产品管理、增长与职业发展"
     },
     {
       "id": "ethan-mollick",
@@ -369,7 +369,7 @@
       "url": "https://www.oneusefulthing.org/feed",
       "enabled": true,
       "limit": 6,
-      "description": "AI 实际应用"
+      "description": "沃顿商学院教授 Ethan Mollick 的通讯,研究并实测 AI 在工作/教育中的真实应用"
     },
     {
       "id": "ahead-of-ai",
@@ -379,7 +379,7 @@
       "url": "https://magazine.sebastianraschka.com/feed",
       "enabled": true,
       "limit": 6,
-      "description": "LLM 训练分析"
+      "description": "《Python 机器学习》作者 Sebastian Raschka 的通讯,深入浅出讲 LLM 训练与原理"
     },
     {
       "id": "anthropic-newsroom",
@@ -390,7 +390,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "Anthropic 产品与公告"
+      "description": "Anthropic 官方新闻室,Claude 产品发布、合作与公司公告"
     },
     {
       "id": "meta-ai",
@@ -401,7 +401,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "LLaMA、SAM 等"
+      "description": "Meta AI(FAIR)官方博客,LLaMA、Segment Anything 等开源模型与基础研究"
     },
     {
       "id": "microsoft-research",
@@ -412,7 +412,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "微软研究院",
+      "description": "微软研究院(MSR)博客,AI、系统等基础研究",
       "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
     },
     {
@@ -424,7 +424,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "Google AI 官方",
+      "description": "Google 官方 AI 博客",
       "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
     },
     {
@@ -436,7 +436,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "Grok 模型",
+      "description": "马斯克的 xAI 官方动态,Grok 模型",
       "_note": "禁用(Cloudflare 人机验证拦截)"
     },
     {
@@ -448,7 +448,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "AI 编程工具"
+      "description": "AI 代码编辑器 Cursor(Anysphere 出品)的官方博客,产品更新与编码 agent 研究"
     },
     {
       "id": "perplexity",
@@ -459,7 +459,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 搜索",
+      "description": "AI 搜索引擎 Perplexity 的官方博客",
       "_note": "禁用(Cloudflare 人机验证拦截)"
     },
     {
@@ -471,7 +471,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 音乐",
+      "description": "AI 音乐生成公司 Suno 的官方博客",
       "_note": "禁用(harness 隐私护栏拦输出(页面含 token 样数据))"
     },
     {
@@ -483,7 +483,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "AI 视频生成"
+      "description": "AI 视频生成公司 Runway 的研究博客,Gen 系列视频模型与通用世界模型"
     },
     {
       "id": "stability",
@@ -494,7 +494,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "Stable Diffusion"
+      "description": "Stable Diffusion 背后的 Stability AI 官方动态,开源图像/音频生成模型"
     },
     {
       "id": "cohere",
@@ -505,7 +505,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "企业级 LLM"
+      "description": "面向企业的大模型公司 Cohere 的博客,Command 系列模型、RAG 与企业级 AI"
     },
     {
       "id": "lmsys",
@@ -516,7 +516,7 @@
       "enabled": true,
       "limit": 8,
       "open": "link",
-      "description": "模型评测"
+      "description": "LMSYS 组织(Chatbot Arena 排行榜、SGLang 推理引擎)的博客,模型评测与高性能推理"
     },
     {
       "id": "the-batch",
@@ -527,7 +527,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "每周 AI 通讯",
+      "description": "吴恩达(Andrew Ng)主理的 The Batch,每周 AI 通讯",
       "_note": "禁用(通用抽取只拿到分类链接,无真文章)"
     },
     {
@@ -539,7 +539,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "AI 新闻聚合",
+      "description": "Unite.AI,AI 新闻与工具聚合站",
       "_note": "禁用(首页为 best-of SEO 榜单页,非新闻文章)"
     },
     {
@@ -551,7 +551,7 @@
       "enabled": false,
       "limit": 8,
       "open": "link",
-      "description": "论文+代码+排行",
+      "description": "Papers With Code(已并入 Hugging Face),论文+代码+排行榜",
       "_note": "禁用(已重定向到 huggingface.co/papers,与 hf-weekly-papers 重复)"
     }
   ]
