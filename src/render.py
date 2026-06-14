@@ -31,7 +31,7 @@ _CAT_EN = {
     "研究": "Research", "产品": "Product", "Newsletter": "Newsletter", "资讯": "News",
     "论文": "Papers", "播客": "Podcast", "视频": "Video", "推文": "Tweets",
 }
-_CAT_ORDER = ["研究", "产品", "Newsletter", "资讯", "论文", "播客", "视频", "推文"]
+_CAT_ORDER = ["推文", "资讯", "视频", "Newsletter", "产品", "研究", "论文", "播客"]
 _WEEKDAY = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 _ICONS = {}  # source_label -> /icons/<domain>.png（render_site 注入）
