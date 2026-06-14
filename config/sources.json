@@ -404,42 +404,6 @@
       "description": "Meta AI(FAIR)官方博客,LLaMA、Segment Anything 等开源模型与基础研究"
     },
     {
-      "id": "microsoft-research",
-      "source_label": "Microsoft Research",
-      "category": "研究",
-      "parser": "browser",
-      "url": "https://www.microsoft.com/en-us/research/blog/",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "微软研究院(MSR)博客,AI、系统等基础研究",
-      "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
-    },
-    {
-      "id": "google-ai-blog",
-      "source_label": "Google AI Blog",
-      "category": "研究",
-      "parser": "browser",
-      "url": "https://blog.google/technology/ai/",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "Google 官方 AI 博客",
-      "_note": "禁用(重 SPA,通用抽取只出导航菜单)"
-    },
-    {
-      "id": "xai",
-      "source_label": "xAI Blog",
-      "category": "产品",
-      "parser": "browser",
-      "url": "https://x.ai/news",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "马斯克的 xAI 官方动态,Grok 模型",
-      "_note": "禁用(Cloudflare 人机验证拦截)"
-    },
-    {
       "id": "cursor",
       "source_label": "Cursor Blog",
       "category": "产品",
@@ -449,30 +413,6 @@
       "limit": 8,
       "open": "link",
       "description": "AI 代码编辑器 Cursor(Anysphere 出品)的官方博客,产品更新与编码 agent 研究"
-    },
-    {
-      "id": "perplexity",
-      "source_label": "Perplexity Blog",
-      "category": "产品",
-      "parser": "browser",
-      "url": "https://www.perplexity.ai/hub",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "AI 搜索引擎 Perplexity 的官方博客",
-      "_note": "禁用(Cloudflare 人机验证拦截)"
-    },
-    {
-      "id": "suno",
-      "source_label": "Suno Blog",
-      "category": "产品",
-      "parser": "browser",
-      "url": "https://suno.com/blog",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "AI 音乐生成公司 Suno 的官方博客",
-      "_note": "禁用(harness 隐私护栏拦输出(页面含 token 样数据))"
     },
     {
       "id": "runway",
@@ -517,42 +457,6 @@
       "limit": 8,
       "open": "link",
       "description": "LMSYS 组织(Chatbot Arena 排行榜、SGLang 推理引擎)的博客,模型评测与高性能推理"
-    },
-    {
-      "id": "the-batch",
-      "source_label": "The Batch (Andrew Ng)",
-      "category": "Newsletter",
-      "parser": "browser",
-      "url": "https://www.deeplearning.ai/the-batch/",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "吴恩达(Andrew Ng)主理的 The Batch,每周 AI 通讯",
-      "_note": "禁用(通用抽取只拿到分类链接,无真文章)"
-    },
-    {
-      "id": "unite-ai",
-      "source_label": "Unite.AI",
-      "category": "资讯",
-      "parser": "browser",
-      "url": "https://www.unite.ai/",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "Unite.AI,AI 新闻与工具聚合站",
-      "_note": "禁用(首页为 best-of SEO 榜单页,非新闻文章)"
-    },
-    {
-      "id": "papers-with-code",
-      "source_label": "Papers With Code",
-      "category": "论文",
-      "parser": "browser",
-      "url": "https://paperswithcode.com/",
-      "enabled": false,
-      "limit": 8,
-      "open": "link",
-      "description": "Papers With Code(已并入 Hugging Face),论文+代码+排行榜",
-      "_note": "禁用(已重定向到 huggingface.co/papers,与 hf-weekly-papers 重复)"
     },
     {
       "id": "yt-ai-explained",

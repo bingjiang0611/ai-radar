@@ -33,13 +33,17 @@ def main():
         print(f"未知 source_id: {sid}", file=sys.stderr)
         return 2
 
+    # 条目 JSON：优先从第 2 个参数指定的文件读，否则从 stdin（后台执行时 stdin 管道可能阻塞，推荐传文件）
     try:
-        rows = json.load(sys.stdin)
+        if len(sys.argv) >= 3:
+            rows = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+        else:
+            rows = json.load(sys.stdin)
     except json.JSONDecodeError as e:
-        print(f"stdin 不是合法 JSON: {e}", file=sys.stderr)
+        print(f"条目不是合法 JSON: {e}", file=sys.stderr)
         return 2
     if not isinstance(rows, list):
-        print("stdin 应为条目数组", file=sys.stderr)
+        print("条目应为数组", file=sys.stderr)
         return 2
 
     new = []
