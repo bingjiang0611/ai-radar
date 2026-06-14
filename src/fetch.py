@@ -10,8 +10,11 @@ import sys
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
-# 追踪类 query 参数前缀，去重前剥掉
-_STRIP_QUERY_PREFIXES = ("utm_", "ref", "fbclid", "gclid", "mc_cid", "mc_eid", "spm")
+# 追踪类 query 参数,去重前剥掉。utm_ 是前缀族;其余精确匹配——
+# 旧版用 startswith("ref") 会误删 reference_id 等合法参数(漏判),故改精确集 + 列全 ref 系真追踪参数。
+_STRIP_PREFIX = ("utm_",)
+_STRIP_EXACT = {"fbclid", "gclid", "mc_cid", "mc_eid", "spm", "ref", "ref_src",
+                "ref_url", "reflink", "igshid", "_hsenc"}
 
 
 def fetch(url, timeout=30):
@@ -42,12 +45,12 @@ def resolve_url(url):
 
 
 def normalize_url(url):
-    """归一化用于去重：剥追踪参数、host 小写、去 fragment、去尾部斜杠。"""
+    """归一化用于去重：剥追踪参数、**排序剩余参数**(顺序不同算同一 URL)、host 小写、去 fragment、去尾部斜杠。"""
     parts = urlsplit(url.strip())
-    kept_query = [
+    kept_query = sorted(
         (k, v) for k, v in parse_qsl(parts.query)
-        if not any(k.lower().startswith(p) for p in _STRIP_QUERY_PREFIXES)
-    ]
+        if k.lower() not in _STRIP_EXACT and not any(k.lower().startswith(p) for p in _STRIP_PREFIX)
+    )
     path = parts.path.rstrip("/") or "/"
     return urlunsplit((
         parts.scheme.lower(),

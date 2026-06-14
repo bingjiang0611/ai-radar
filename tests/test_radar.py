@@ -64,6 +64,18 @@ class TestNormalize(unittest.TestCase):
             url_hash("https://example.com/a/"),
         )
 
+    def test_query_param_order_same_hash(self):
+        # 参数顺序不同应算同一 URL(排序后归一)——旧版漏判会产生重复行
+        self.assertEqual(
+            url_hash("https://e.com/a?b=2&a=1"),
+            url_hash("https://e.com/a?a=1&b=2"),
+        )
+
+    def test_keeps_legit_ref_prefix_param(self):
+        # reference_id 是合法参数,不能因前缀 "ref" 被删(旧版 bug);reflink 是真追踪,要删
+        self.assertIn("reference_id=9", normalize_url("https://e.com/a?reference_id=9&reflink=spam"))
+        self.assertNotIn("reflink", normalize_url("https://e.com/a?reference_id=9&reflink=spam"))
+
 
 class TestResolveUrl(unittest.TestCase):
     def test_no_placeholder_unchanged(self):
