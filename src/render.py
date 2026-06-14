@@ -131,6 +131,9 @@ img{max-width:100%}
   border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--faint)}
 .foot .sep{opacity:.5}
 .empty{display:none;text-align:center;color:var(--faint);font-size:14px;padding:54px 0}
+.lightbox{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;
+  cursor:zoom-out;background:oklch(12% 0.02 262 / .9);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.lightbox img{max-width:92vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 60px -10px oklch(0% 0 0 / .6)}
 @media(max-width:560px){.top-in{padding:10px 16px;gap:10px}.brand span{display:none}}
 """
 
@@ -147,9 +150,11 @@ _HOME_CSS = """
 .meta .src{color:var(--fg-2);font-weight:500}
 .lead h3{font-family:var(--serif);font-weight:500;font-size:31px;line-height:1.16;letter-spacing:-.01em;margin:14px 0 10px;text-wrap:balance}
 .lead:hover h3{color:var(--accent-2)}
+.lead-sub{font-family:var(--serif);font-style:italic;font-size:16px;line-height:1.35;color:var(--muted);margin:-2px 0 12px;max-width:52ch}
 .lead p{color:var(--fg-2);font-size:14.5px;line-height:1.6;max-width:54ch;
-  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.lead .when{margin-top:auto;padding-top:18px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.lead .when{margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+.lead{justify-content:center}
 .mini-list{display:flex;flex-direction:column}
 .mini{padding:15px 24px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px;transition:background .15s}
 .mini:last-child{border-bottom:0}
@@ -360,6 +365,23 @@ if(f)f.addEventListener('click',function(){var id=f.dataset.id;if(!/^[\\w-]{11}$
 """
 
 
+_LIGHTBOX_JS = """
+(function(){
+  function open(src){
+    var ov=document.createElement('div');ov.className='lightbox';
+    var im=document.createElement('img');im.src=src;ov.appendChild(im);
+    ov.addEventListener('click',function(){ov.remove();});
+    document.body.appendChild(ov);
+  }
+  [].slice.call(document.querySelectorAll('.it-media img, .doc img')).forEach(function(im){
+    im.style.cursor='zoom-in';
+    im.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();open(im.currentSrc||im.src);});
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){var l=document.querySelector('.lightbox');if(l)l.remove();}});
+})();
+"""
+
+
 def _e(s):
     return html.escape(s or "")
 
@@ -404,9 +426,9 @@ def _avatar(label, kind="avatar"):
 
 
 def _fmt_md(s):
-    """'2026-06-14...' → '06-14'。"""
+    """'2026-06-14...' → '06-14'。非 ISO(如 RFC822 pubDate)返回 ""，由调用方回退 fetched_at。"""
     s = (s or "")[:10]
-    return s[5:] if len(s) >= 10 else s
+    return s[5:] if (len(s) == 10 and s[4] == "-" and s[7] == "-") else ""
 
 
 def _fmt_time(item):
@@ -474,10 +496,9 @@ def _render_home(items, descriptions, methods, interactions, out):
         else:
             s["count"] += 1
 
-    # 「最新」头版：跨源最新（排除推文，避免高频推淹没头版）
+    # 「最新」头版：跨源最新（排除推文，避免高频推淹没头版）。lead 取近期里摘要最长的一条，填满版面不空。
     front_pool = [it for it in items if it.get("category") != "推文"]
-    lead = next((it for it in front_pool[:8] if (it.get("summary_zh") or it.get("summary"))),
-                front_pool[0] if front_pool else None)
+    lead = max(front_pool[:15], key=lambda it: len(it.get("summary_zh") or it.get("summary") or "")) if front_pool else None
     minis = [it for it in front_pool if it is not lead][:4]
 
     def front_meta(it):
@@ -494,8 +515,11 @@ def _render_home(items, descriptions, methods, interactions, out):
         when = _fmt_md(lead.get("published_at")) or _fmt_md(lead.get("fetched_at"))
         when_html = f'{_e(when)}{" · " + rt if rt else ""}'
         summ_html = f'<p>{_e(summ)}</p>' if summ else ""
+        title_en = lead.get("title") or ""
+        sub_html = (f'<p class="lead-sub">{_e(title_en)}</p>'
+                    if lead.get("title_zh") and title_en and lead.get("title_zh") != title_en else "")
         lead_html = (f'<a class="lead {_cat_class(lead.get("category",""))}" href="{href}">'
-                     f'{front_meta(lead)}<h3>{_e(title)}</h3>{summ_html}'
+                     f'{front_meta(lead)}<h3>{_e(title)}</h3>{sub_html}{summ_html}'
                      f'<div class="when">{when_html}</div></a>')
         mini_html = ""
         for it in minis:
@@ -628,7 +652,7 @@ def _render_feed(items, interactions, out):
             + f'<div class="pills" id="pills">{pills_html}</div></div>\n'
             + body_html
             + '\n<p class="empty" id="empty">该分类暂无内容。</p>\n</main>\n'
-            + f'<script>{_THEME_JS}{_FEED_JS}</script>\n</body>\n</html>\n')
+            + f'<script>{_THEME_JS}{_FEED_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
     (out / "feed.html").write_text(page, encoding="utf-8")
 
 
@@ -727,7 +751,7 @@ def _render_detail(item, out, descriptions):
 
     page = (_head(head_title + " · AI Radar", _DETAIL_CSS, maxw="680px" if not is_video else "760px")
             + "\n<body>\n" + progress + "\n" + _detail_header(src, cat_cls) + "\n" + body
-            + f'\n<script>{_THEME_JS}{_DETAIL_JS}</script>\n</body>\n</html>\n')
+            + f'\n<script>{_THEME_JS}{_DETAIL_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 
