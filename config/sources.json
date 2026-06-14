@@ -389,6 +389,30 @@
       "description": "The Batch(DeepLearning.AI / 吴恩达),每周 AI 要闻精选与评论"
     },
     {
+      "id": "x-list-ai",
+      "source_label": "X · AI 列表",
+      "category": "推文",
+      "parser": "browser",
+      "fetch": "twitter-cli",
+      "url": "https://x.com/i/lists/1597115448146898944",
+      "enabled": true,
+      "limit": 20,
+      "open": "link",
+      "description": "X(Twitter)AI 主题列表,聚合 AI 圈高信号账号的推文(经 AI 关键词过滤)"
+    },
+    {
+      "id": "x-list-following",
+      "source_label": "X · 关注",
+      "category": "推文",
+      "parser": "browser",
+      "fetch": "twitter-cli",
+      "url": "https://x.com/i/lists/2056920461594837041",
+      "enabled": true,
+      "limit": 20,
+      "open": "link",
+      "description": "X(Twitter)关注列表,我关注的 AI 从业者/研究者推文(经 AI 关键词过滤)"
+    },
+    {
       "id": "meta-ai",
       "source_label": "Meta AI",
       "category": "研究",
