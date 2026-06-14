@@ -326,7 +326,7 @@ _FEED_JS = """
   if(src){if(titleEl)titleEl.textContent=src;if(subEl)subEl.textContent='单一来源 · 按时间倒序';if(pillBox)pillBox.style.display='none';}
   function apply(){var q=(input&&input.value||'').trim().toLowerCase(),hit=0;
     items.forEach(function(el){
-      var inFeed=src?el.dataset.source===src:el.dataset.category!=='推文';
+      var inFeed=src?el.dataset.source===src:el.dataset.cat!=='推文';
       var ok=inFeed&&(!cat||el.dataset.cat===cat)&&(!q||(el.dataset.text||'').indexOf(q)>-1);
       el.style.display=ok?'':'none';if(ok)hit++;});
     days.forEach(function(s){var any=[].slice.call(s.querySelectorAll('.item')).some(function(el){return el.style.display!=='none';});s.style.display=any?'':'none';});
