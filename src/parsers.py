@@ -86,7 +86,9 @@ def parse_rss_text(xml, limit=10):
 
 def parse_rss(source):
     xml = fetch(source["url"])
-    return parse_rss_text(xml, source.get("limit", 10)) if xml else []
+    if xml is None:  # 请求失败(网络/超时/HTTP≥400)→ 抛出让上层报 ✗,区别于"抓到内容但 0 条"
+        raise RuntimeError("请求失败(网络/超时/HTTP 错误)")
+    return parse_rss_text(xml, source.get("limit", 10))
 
 
 # ---------- 通用 JSON API ----------
@@ -149,7 +151,9 @@ def parse_json_text(raw, cfg, limit=15):
 
 def parse_json_api(source):
     raw = fetch(source["url"])
-    return parse_json_text(raw, source.get("json", {}), source.get("limit", 15)) if raw else []
+    if raw is None:
+        raise RuntimeError("请求失败(网络/超时/HTTP 错误)")
+    return parse_json_text(raw, source.get("json", {}), source.get("limit", 15))
 
 
 # ---------- 小宇宙播客（Next.js 页面，集数据嵌在 __NEXT_DATA__ JSON 里，无公开 RSS） ----------
@@ -184,7 +188,9 @@ def parse_xiaoyuzhou_text(html_text, limit=15):
 
 def parse_xiaoyuzhou(source):
     html_text = fetch(source["url"])
-    return parse_xiaoyuzhou_text(html_text, source.get("limit", 15)) if html_text else []
+    if html_text is None:
+        raise RuntimeError("请求失败(网络/超时/HTTP 错误)")
+    return parse_xiaoyuzhou_text(html_text, source.get("limit", 15))
 
 
 PARSERS = {

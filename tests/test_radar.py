@@ -119,6 +119,22 @@ class TestRss(unittest.TestCase):
         self.assertEqual(items[0]["title"], "Tom & Jerry & AI")
 
 
+class TestSourceFailure(unittest.TestCase):
+    def test_parse_rss_raises_on_fetch_failure(self):
+        # fetch 返 None(网络/超时/HTTP≥400)→ parse_rss 抛异常,让 run.py 报 ✗,区别于"抓到内容但 0 条"
+        import parsers
+        with mock.patch.object(parsers, "fetch", return_value=None):
+            with self.assertRaises(RuntimeError):
+                parsers.parse_rss({"url": "https://down.example/feed", "limit": 10})
+
+    def test_parse_rss_empty_feed_returns_empty_not_raise(self):
+        # 抓到合法但空的 feed(如 arXiv 周末)→ 返 [] 不抛,显示"抓到 0 条"
+        import parsers
+        empty = '<?xml version="1.0"?><rss><channel><title>x</title></channel></rss>'
+        with mock.patch.object(parsers, "fetch", return_value=empty):
+            self.assertEqual(parsers.parse_rss({"url": "https://e.com/feed"}), [])
+
+
 class TestJson(unittest.TestCase):
     def test_dotted_path_and_url_template(self):
         items = parse_json_text(JSON_FIXTURE, HF_CFG)

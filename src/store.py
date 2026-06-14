@@ -56,6 +56,16 @@ def url_hash(url):
     return hashlib.md5(normalize_url(url).encode("utf-8")).hexdigest()[:16]
 
 
+def all_hashes(conn=None):
+    """一次性取全部已入库 hash 集合——并发抓取时主线程预读,线程内只做集合判存、不碰 SQLite。"""
+    c = conn or _conn()
+    init_db(c)
+    hs = {r[0] for r in c.execute("SELECT hash FROM items").fetchall()}
+    if conn is None:
+        c.close()
+    return hs
+
+
 def hash_exists(hash_val, conn=None):
     """该 hash 是否已入库（用于只对新条目做昂贵的内容处理/图片下载）。"""
     c = conn or _conn()

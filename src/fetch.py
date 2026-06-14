@@ -21,7 +21,8 @@ def fetch(url, timeout=30):
     """返回响应正文字符串；失败返回 None。"""
     try:
         r = subprocess.run(
-            ["curl", "-sL", "-A", "Mozilla/5.0", url],
+            # -f：HTTP ≥400 时 curl 退非 0(否则 502 错误页 HTML 会被当正常 body 解析成 0 条,掩盖失败)
+            ["curl", "-fsL", "-A", "Mozilla/5.0", url],
             capture_output=True, text=True, timeout=timeout,
         )
         return r.stdout if r.returncode == 0 else None
