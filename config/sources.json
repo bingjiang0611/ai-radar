@@ -553,6 +553,166 @@
       "open": "link",
       "description": "Papers With Code(已并入 Hugging Face),论文+代码+排行榜",
       "_note": "禁用(已重定向到 huggingface.co/papers,与 hf-weekly-papers 重复)"
+    },
+    {
+      "id": "yt-ai-explained",
+      "source_label": "AI Explained",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCNJ1Ymd5yFuUPtn21xtRbbw",
+      "enabled": true,
+      "limit": 6,
+      "description": "深度拆解 AI 突破,分析 GPT/Claude/Gemini 等模型发布"
+    },
+    {
+      "id": "yt-matt-wolfe",
+      "source_label": "Matt Wolfe",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UChpleBmo18P08aKCIgti38g",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 新闻、工具测评、论文解读,简洁高效"
+    },
+    {
+      "id": "yt-wes-roth",
+      "source_label": "Wes Roth",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCqcbQf6yw5KzRoDDcZ_wBSw",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI Agent、自动化与 AI 对商业的影响,更新频繁"
+    },
+    {
+      "id": "yt-two-minute-papers",
+      "source_label": "Two Minute Papers",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCbfYPyITQ-7l4upoX8nvctg",
+      "enabled": true,
+      "limit": 6,
+      "description": "用两分钟讲解最新 AI 论文,视觉化展示效果"
+    },
+    {
+      "id": "yt-chase-ai",
+      "source_label": "Chase AI",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCoy6cTJ7Tg0dqS-DI-_REsA",
+      "enabled": true,
+      "limit": 6,
+      "description": "实用 AI 工具教程,Claude Code 深度使用,无废话"
+    },
+    {
+      "id": "yt-the-ai-advantage",
+      "source_label": "The AI Advantage",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCHhYXsLBEVVnbvsq57n1MTQ",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 工具实操指南,面向创作者和企业"
+    },
+    {
+      "id": "yt-ai-foundations",
+      "source_label": "AI Foundations",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCWZwfV3ICOt3uEPpW6hYK4g",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 自动化工作流、Agent 构建,面向创业者"
+    },
+    {
+      "id": "yt-skill-leap-ai",
+      "source_label": "Skill Leap AI",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCwSozl89jl2zUDzQ4jGJD3g",
+      "enabled": true,
+      "limit": 6,
+      "description": "AI 工具入门到进阶,适合新手"
+    },
+    {
+      "id": "yt-peter-yang",
+      "source_label": "Peter Yang",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCnpBg7yqNauHtlNSpOl5-cg",
+      "enabled": true,
+      "limit": 6,
+      "description": "资深产品人讲用 AI 做产品、提示词与工作流,面向 PM/创作者"
+    },
+    {
+      "id": "yt-andrej-karpathy",
+      "source_label": "Andrej Karpathy",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCXUPKJO5MZQN11PqgIvyuvQ",
+      "enabled": true,
+      "limit": 6,
+      "description": "前 Tesla AI 总监、OpenAI 创始成员;从零手搓神经网络与 GPT,理解 LLM 第一性原理的天花板"
+    },
+    {
+      "id": "yt-3blue1brown",
+      "source_label": "3Blue1Brown",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCYO_jab_esuFRV4b17AJtAw",
+      "enabled": true,
+      "limit": 6,
+      "description": "用动画讲数学与深度学习原理,视觉化教学天花板"
+    },
+    {
+      "id": "yt-krish-naik",
+      "source_label": "Krish Naik",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCNU_lfiiWBdtULKOw6X0Dig",
+      "enabled": true,
+      "limit": 6,
+      "description": "NLP/ML/深度学习全套教程,内容最全"
+    },
+    {
+      "id": "yt-tina-huang",
+      "source_label": "Tina Huang",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC2UXDak6o7rBm23k3Vv5dww",
+      "enabled": true,
+      "limit": 6,
+      "description": "前 Meta 数据科学家,数据科学/技术求职与用 AI 高效自学"
+    },
+    {
+      "id": "yt-20vc",
+      "source_label": "20VC",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCf0PBRjhf0rF8fWBIxTuoWA",
+      "enabled": true,
+      "limit": 6,
+      "description": "Harry Stebbings 的访谈,深聊顶级 VC、科技创始人与 AI 研究者"
+    },
+    {
+      "id": "yt-unsupervised-learning",
+      "source_label": "Unsupervised Learning",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCUl-s_Vp-Kkk_XVyDylNwLA",
+      "enabled": true,
+      "limit": 6,
+      "description": "Redpoint 出品 AI 播客,与 OpenAI/Anthropic/Google 研究者深度对话"
+    },
+    {
+      "id": "yt-anthropic-youtube",
+      "source_label": "Anthropic (YouTube)",
+      "category": "视频",
+      "parser": "rss",
+      "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCrDwWp7EBBv4NwvScIpBDOA",
+      "enabled": true,
+      "limit": 6,
+      "description": "Anthropic 官方 YouTube,AI 安全/对齐研究讲解"
     }
   ]
 }
