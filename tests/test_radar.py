@@ -246,6 +246,11 @@ class TestRender(unittest.TestCase):
         self.assertIn('target="_blank"', card)
         self.assertNotIn("/item/", card)
 
+    def test_lazy_imgs_adds_loading(self):
+        out = render._lazy_imgs('<p><img src="/img/a.png"> and <img loading="lazy" src="/img/b.png"></p>')
+        self.assertEqual(out.count('loading="lazy"'), 2)   # 补缺失的、不重复加已有的
+        self.assertIn('<img loading="lazy" src="/img/a.png"', out)
+
     def test_tabs_no_rewrite(self):
         panel = render._tabs({"content_html": "<p>x</p>"})
         self.assertNotIn("乔木风格重写", panel)

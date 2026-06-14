@@ -390,6 +390,15 @@ _LIGHTBOX_JS = """
 """
 
 
+_IMG_NO_LAZY = re.compile(r'(?i)<img(?![^>]*\bloading=)')
+
+
+def _lazy_imgs(html_str):
+    """给正文/推文配图的 <img> 补 loading="lazy"——默认时间流隐藏的推文图(及详情页正文图)
+    不滚动到视口就不下载,省掉首屏不需要的图片字节。"""
+    return _IMG_NO_LAZY.sub('<img loading="lazy"', html_str or "")
+
+
 def _e(s):
     return html.escape(s or "")
 
@@ -615,7 +624,7 @@ def _card(item, mode="detail"):
         orig = item.get("title") or ""
         tw_ext = '<span class="ext">↗</span>' if is_ext else ""
         orig_html = f'<div class="it-orig">{_e(orig)}</div>' if orig and orig != trans else ""
-        media = item.get("content_html") or ""
+        media = _lazy_imgs(item.get("content_html") or "")
         media_html = f'<div class="it-media">{media}</div>' if media else ""
         return (f'<a class="item {_cat_class(cat)}" href="{href}"{ext_attr} '
                 f'data-cat="{_e(cat)}" data-source="{_e(src)}" data-text="{_e(f"{trans} {orig} {src}".lower())}">'
@@ -728,7 +737,7 @@ def _bili_embed(bili_url, yt_url, src=""):
 
 def _tabs(item):
     """文章态 tabs：原文（content_html 原样，不改写）/ 中文翻译（诚实空态，translation_md 现恒空）。"""
-    content = item.get("content_html") or ""
+    content = _lazy_imgs(item.get("content_html") or "")
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
     return ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button>'
             '<button class="tab" data-panel="p-zh">中文翻译</button></div>'

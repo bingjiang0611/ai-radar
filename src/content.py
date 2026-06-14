@@ -86,13 +86,15 @@ def _download_image(url):
     url = _unescape(url)  # HTML 属性里的 &amp; → & —— 否则带 query 的 URL(如 Next.js _next/image?...&w=)参数传不全
     try:
         r = subprocess.run(
-            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "20", url],
+            # --max-filesize 在 Content-Length 已知时提前中止超大图(不必下完再丢),省内存/带宽
+            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "20",
+             "--max-filesize", str(_MAX_IMG_BYTES), url],
             capture_output=True, timeout=25,
         )
     except Exception:  # noqa: BLE001 — 单张图失败不影响整篇
         return None
     data = r.stdout
-    if r.returncode != 0 or not data or len(data) > _MAX_IMG_BYTES:
+    if r.returncode != 0 or not data or len(data) > _MAX_IMG_BYTES:  # 无 Content-Length 时兜底
         return None
     if not _is_image(data):  # 拿到的是 HTML 错误页/登录页(非真图)→ 不存,localize_images 会丢掉该 <img>
         return None
