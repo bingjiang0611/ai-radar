@@ -8,7 +8,7 @@
 import hashlib
 import re
 import subprocess
-from html import escape as _escape
+from html import escape as _escape, unescape as _unescape
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -66,7 +66,8 @@ def _guess_ext(url, data):
 
 
 def _download_image(url):
-    """下载图片 → dist/img/{hash}{ext}；返回站内路径 /img/... 或 None（失败/过大）。"""
+    """下载图片 → dist/img/{hash}{ext}；返回站内路径 /img/... 或 None（失败/过大/非图片）。"""
+    url = _unescape(url)  # HTML 属性里的 &amp; → & —— 否则带 query 的 URL(如 Next.js _next/image?...&w=)参数传不全
     try:
         r = subprocess.run(
             ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "20", url],
@@ -77,8 +78,11 @@ def _download_image(url):
     data = r.stdout
     if r.returncode != 0 or not data or len(data) > _MAX_IMG_BYTES:
         return None
+    ext = _guess_ext(url, data)
+    if ext == ".img":  # 识别不出图片格式(多半是错误页/占位符,如 33 字节的「w parameter required」)→ 不存,保留外链
+        return None
     h = hashlib.sha256(data).hexdigest()[:16]
-    name = f"{h}{_guess_ext(url, data)}"
+    name = f"{h}{ext}"
     DIST_IMG.mkdir(parents=True, exist_ok=True)
     path = DIST_IMG / name
     if not path.exists():
