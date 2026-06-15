@@ -54,6 +54,20 @@ def is_ai(text):
     return bool(_AI_EN.search(text)) or any(k in text for k in _AI_ZH)
 
 
+# 抽奖/转发求评等运营噪音——常含 AI 词(抽 N 个人送书、Grok 抽转发名单)蒙混过 is_ai,单独滤掉。
+# twitter-cli 不暴露回复/会话元数据,无法判自串回复,故用抽奖语义信号兜这类。
+_NOISE = re.compile(
+    r"抽奖|中奖|开奖|获奖|抽中|giveaway|红包|赠书|送书"
+    r"|转发.{0,4}名单|(转发|评论|引用|点赞).{0,4}抽|补.{0,3}评论|抽\s*\d{1,4}\s*(个|名|人|位)",
+    re.I,
+)
+
+
+def is_noise(text):
+    """抽奖/转发求互动类运营噪音(非 AI 实质内容)→ 不收。"""
+    return bool(_NOISE.search(text or ""))
+
+
 def first_json(text):
     i = 0
     while i < len(text) and text[i] not in "[{":
@@ -131,7 +145,8 @@ def main():
 
     raw = fetch_list(list_id, FETCH_N)
     recent = [t for t in raw if in_window(t)]          # 先卡 24h 时间窗
-    recent = [t for t in recent if not is_reply(t)]    # 去掉回复帖
+    recent = [t for t in recent if not is_reply(t)]    # 去掉回复帖(正文以 @ 开头)
+    recent = [t for t in recent if not is_noise(t.get("text", "") or "")]  # 去掉抽奖/转发求互动噪音
     ai = [t for t in recent if is_ai(t.get("text", "") or "")]
     items, seen = [], set()
     for t in ai:

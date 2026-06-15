@@ -143,6 +143,17 @@ class TestSourceFailure(unittest.TestCase):
             self.assertEqual(parsers.parse_rss({"url": "https://e.com/feed"}), [])
 
 
+class TestTweetNoise(unittest.TestCase):
+    def test_is_noise_filters_giveaway_keeps_real(self):
+        import fetch_x
+        # 抽奖/转发求互动噪音 → True(即便含 AI 词)
+        self.assertTrue(fetch_x.is_noise("🎟️抽奖啦！抽 10 个人送《AI 提效实战指南》"))
+        self.assertTrue(fetch_x.is_noise("由于 Grok 拿不到“转发”名单，只能从“评论”或“引用”里面抽，请补一个评论"))
+        # 正常 AI 推 → False
+        self.assertFalse(fetch_x.is_noise("Claude Fable 5 在 agentic 编码上的表现远超 GPT"))
+        self.assertFalse(fetch_x.is_noise("我们对 7 个前沿模型做了 autoresearch 基准测试"))
+
+
 class TestJson(unittest.TestCase):
     def test_dotted_path_and_url_template(self):
         items = parse_json_text(JSON_FIXTURE, HF_CFG)
