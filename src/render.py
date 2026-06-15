@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from store import _parse_dt  # 统一时间解析(兼容 ISO 与 RFC822 pubDate)
+from content import md_to_html  # 译文 translation_md(markdown)→ HTML
 
 # 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
@@ -736,13 +737,18 @@ def _bili_embed(bili_url, yt_url, src=""):
 
 
 def _tabs(item):
-    """文章态 tabs：原文（content_html 原样，不改写）/ 中文翻译（诚实空态，translation_md 现恒空）。"""
+    """文章态 tabs：原文（content_html 原样，不改写）/ 中文翻译（translation_md 有则渲染全文，无则诚实空态）。"""
     content = _lazy_imgs(item.get("content_html") or "")
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
+    tmd = (item.get("translation_md") or "").strip()
+    if tmd:
+        zh, zh_cls = _lazy_imgs(md_to_html(tmd)), "panel doc"  # 人工挑选条目的全文译文
+    else:
+        zh, zh_cls = _tr_empty("文章"), "panel"
     return ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button>'
             '<button class="tab" data-panel="p-zh">中文翻译</button></div>'
             f'<section class="panel on doc" id="p-orig">{yuanwen}</section>'
-            f'<section class="panel" id="p-zh">{_tr_empty("文章")}</section>')
+            f'<section class="{zh_cls}" id="p-zh">{zh}</section>')
 
 
 def _detail_header(src, cat_cls):
