@@ -45,6 +45,20 @@ def resolve_url(url):
     return url.replace("{week}", f"{iso[0]}-W{iso[1]:02d}").replace("{date}", now.strftime("%Y-%m-%d"))
 
 
+# 硬付费墙域名:正文 Jina/直连都穿不过,抓到也只是摘要 stub → 抓取时整条跳过(只滤拿不到全文的)。
+# 计量墙但服务端直出正文、直连能抓全文的(如 wired.com / MIT Tech Review)不在此列,保留。
+_HARD_PAYWALL = (
+    "wsj.com", "nytimes.com", "ft.com", "bloomberg.com", "theinformation.com",
+    "economist.com", "businessinsider.com", "seekingalpha.com", "barrons.com",
+)
+
+
+def is_paywalled(url):
+    """URL 是否落在硬付费墙域名(正文不可得)。run.py/ingest.py 抓取时据此整条跳过。"""
+    host = urlsplit(url if "//" in (url or "") else "//" + (url or "")).netloc.lower()
+    return any(host == d or host.endswith("." + d) for d in _HARD_PAYWALL)
+
+
 def normalize_url(url):
     """归一化用于去重：剥追踪参数、**排序剩余参数**(顺序不同算同一 URL)、host 小写、去 fragment、去尾部斜杠。"""
     parts = urlsplit(url.strip())

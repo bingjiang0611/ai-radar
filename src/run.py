@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import content                  # noqa: E402
-from fetch import resolve_url    # noqa: E402
+from fetch import resolve_url, is_paywalled    # noqa: E402
 from parsers import PARSERS      # noqa: E402
 from store import init_db, insert_items, all_items, all_hashes, url_hash, purge_old, _parse_dt  # noqa: E402
 from render import render_site   # noqa: E402
@@ -79,6 +79,8 @@ def fetch_all():
     pending = []
     for s, rows in fetched:
         for r in rows:
+            if is_paywalled(r["url"]):
+                continue  # 硬付费墙域名:正文拿不到,只会是 stub → 不收
             h = url_hash(r["url"])
             if h in existing:
                 continue

@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import content                                          # noqa: E402
+from fetch import is_paywalled                           # noqa: E402
 from store import insert_items, url_hash, hash_exists   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,6 +52,8 @@ def main():
     for r in rows:
         if not isinstance(r, dict) or not r.get("url") or not r.get("title"):
             continue
+        if is_paywalled(r["url"]):
+            continue  # 硬付费墙域名:正文拿不到,不收
         if hash_exists(url_hash(r["url"])):
             continue
         body = r.get("content", "") or ""

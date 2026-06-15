@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import content                                         # noqa: E402
 import render                                           # noqa: E402
-from fetch import normalize_url, resolve_url           # noqa: E402
+from fetch import normalize_url, resolve_url, is_paywalled  # noqa: E402
 from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
 from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
 
@@ -70,6 +70,14 @@ class TestNormalize(unittest.TestCase):
             url_hash("https://e.com/a?b=2&a=1"),
             url_hash("https://e.com/a?a=1&b=2"),
         )
+
+    def test_hard_paywall_detected_metered_kept(self):
+        # 硬付费墙(正文拿不到)→ 跳过;计量墙但直连能抓全文的(wired/MIT TR)保留
+        self.assertTrue(is_paywalled("https://www.wsj.com/tech/ai/x"))
+        self.assertTrue(is_paywalled("https://www.bloomberg.com/news/x"))
+        self.assertTrue(is_paywalled("https://ft.com/content/x"))
+        self.assertFalse(is_paywalled("https://www.wired.com/story/x"))
+        self.assertFalse(is_paywalled("https://techcrunch.com/2026/x"))
 
     def test_keeps_legit_ref_prefix_param(self):
         # reference_id 是合法参数,不能因前缀 "ref" 被删(旧版 bug);reflink 是真追踪,要删
