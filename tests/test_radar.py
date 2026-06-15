@@ -308,13 +308,26 @@ class TestRender(unittest.TestCase):
 
     def test_card_tweet_avatar_name_quote(self):
         import json as _json
+        import content
+        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
+        (content.DIST_IMG / "q-img.png").write_bytes(b"x")   # 引用配图文件存在 → _lazy_imgs 保留
+        (content.DIST_IMG / "q-av.jpg").write_bytes(b"x")    # 引用作者头像文件存在
+        render._img_have_cache[0] = None
         item = {"hash": "tw1", "category": "推文", "source_label": "X · 关注",
                 "title": "@blackanger：基于决策阶梯，给 AI 一段 prompt", "title_zh": "",
                 "tweet_meta": _json.dumps({"name": "AlexZ", "handle": "blackanger", "avatar": "/img/av.jpg",
                                            "verified": True, "rt": "",
                                            "quote": {"name": "Tech with Mak", "handle": "techNmak",
-                                                     "text": "A dev got so frustrated"}}, ensure_ascii=False)}
-        card = render._card(item, "link")
+                                                     "text": "A dev got so frustrated",
+                                                     "text_zh": "一位开发者非常沮丧",
+                                                     "image": "/img/q-img.png",
+                                                     "avatar": "/img/q-av.jpg"}}, ensure_ascii=False)}
+        try:
+            card = render._card(item, "link")
+        finally:
+            (content.DIST_IMG / "q-img.png").unlink(missing_ok=True)
+            (content.DIST_IMG / "q-av.jpg").unlink(missing_ok=True)
+            render._img_have_cache[0] = None
         self.assertIn('src="/img/av.jpg"', card)        # 真头像
         self.assertIn("AlexZ", card)                     # 作者名
         self.assertIn("tw-vf", card)                     # 认证徽章
@@ -322,6 +335,11 @@ class TestRender(unittest.TestCase):
         self.assertNotIn('it-title">@blackanger', card)  # 正文不再以 @handle 开头(data-text 搜索域仍保留原文)
         self.assertIn("Tech with Mak", card)             # 引用作者
         self.assertIn("A dev got so frustrated", card)   # 引用文本
+        self.assertIn("一位开发者非常沮丧", card)         # 引用中译(text_zh)显示在英文下
+        self.assertIn("tw-q-zh", card)                   # 中译用独立样式行
+        self.assertIn('class="tw-q-av"', card)           # 引用作者头像(二次抓补的)
+        self.assertIn('src="/img/q-img.png"', card)      # 引用配图(父推不给,二次抓补)
+        self.assertIn("tw-q-media", card)                # 引用配图容器
 
     def test_card_search_blob_has_english_and_chinese(self):
         # 显示中文标题,但搜索域 data-text 须中英都含——否则英文关键词搜不到

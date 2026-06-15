@@ -298,9 +298,13 @@ _FEED_CSS = """
 .it-meta .tw-handle{color:var(--faint);font-weight:400}
 .it-meta .tw-rt{color:var(--faint);font-size:11.5px}
 .tw-quote{margin-top:10px;border:1px solid var(--border);border-radius:13px;padding:9px 12px;background:var(--surface-2)}
-.tw-quote .tw-q-head{font-size:13px;font-weight:600;color:var(--fg-2);margin-bottom:2px}
+.tw-quote .tw-q-head{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--fg-2);margin-bottom:3px}
+.tw-quote .tw-q-av{width:18px;height:18px;border-radius:50%;flex:none;object-fit:cover;background:var(--inset)}
 .tw-quote .tw-q-head .tw-handle{font-weight:400;color:var(--faint)}
 .tw-quote .tw-q-text{font-size:13.5px;line-height:1.5;color:var(--fg-2);white-space:pre-wrap}
+.tw-quote .tw-q-zh{font-size:13.5px;line-height:1.55;color:var(--muted);margin-top:4px;white-space:pre-wrap}
+.tw-quote .tw-q-media{margin-top:8px}
+.tw-quote .tw-q-media img{max-height:200px;max-width:100%;border-radius:10px;border:1px solid var(--border);object-fit:cover;display:block}
 .play{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:var(--cat)}
 .play svg{width:14px;height:14px}
 /* ===== v2 增益:左侧迷你日期游标 + day-label 分类点位 + 已精读徽章 ===== */
@@ -953,9 +957,15 @@ def _card(item, mode="detail", anchor=""):
         quote_html = ""
         if q.get("text") or q.get("handle"):
             qn = (q.get("name") or "").strip() or (f"@{q.get('handle','')}")
-            qh = f' <span class="tw-handle">@{_e(q.get("handle"))}</span>' if q.get("handle") else ""
-            quote_html = (f'<div class="tw-quote"><div class="tw-q-head">{_e(qn)}{qh}</div>'
-                          f'<div class="tw-q-text">{_e(q.get("text", ""))}</div></div>')
+            qh = f'<span class="tw-handle">@{_e(q.get("handle"))}</span>' if q.get("handle") else ""
+            q_av = _lazy_imgs(f'<img class="tw-q-av" src="{_e(q["avatar"])}" alt="">') if q.get("avatar") else ""
+            q_txt = f'<div class="tw-q-text">{_e(q.get("text", ""))}</div>' if q.get("text") else ""
+            q_zh = f'<div class="tw-q-zh">{_e(q.get("text_zh"))}</div>' if q.get("text_zh") else ""
+            q_img = _lazy_imgs(f'<img src="{_e(q["image"])}" alt="">') if q.get("image") else ""
+            q_img_html = f'<div class="tw-q-media">{q_img}</div>' if q_img else ""
+            quote_html = (f'<div class="tw-quote"><div class="tw-q-head">{q_av}'
+                          f'<span class="tw-q-name">{_e(qn)}</span>{qh}</div>'
+                          f'{q_txt}{q_zh}{q_img_html}</div>')
         return (f'<a class="item {_cat_class(cat)} tw" href="{href}"{ext_attr} '
                 f'data-cat="{_e(cat)}" data-source="{_e(src)}" data-text="{_e(f"{trans} {orig} {src}".lower())}">'
                 f'{avatar}<div class="it-body">'

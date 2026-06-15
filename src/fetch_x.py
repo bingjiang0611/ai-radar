@@ -105,6 +105,34 @@ def fetch_list(list_id, n):
     return obj if isinstance(obj, list) else []
 
 
+def _fetch_quote_detail(qid):
+    """二次抓被引用推:父推的 quotedTweet 只给 {id,text(截断),author},**不给配图**。
+    用被引推自己的 id 再抓一次,取全文 + 配图(下载进站)+ 引用作者头像。
+    被引推已删/受保护/抓取失败 → 返回 None,调用方退回纯文本引用(不崩、不清空已有引用)。"""
+    if not qid:
+        return None
+    try:
+        r = subprocess.run(
+            ["twitter", "tweet", str(qid), "--json"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=120,
+        )
+        obj = first_json(r.stdout)
+        data = obj.get("data") if isinstance(obj, dict) else None
+        t = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
+        if not isinstance(t, dict):
+            return None
+        a = t.get("author") or {}
+        photos = [m.get("url", "") for m in (t.get("media") or [])
+                  if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
+        return {
+            "text": re.sub(r"\s+", " ", html.unescape(t.get("text", "") or "")).strip(),
+            "image": (content._download_image(photos[0]) or "") if photos else "",
+            "avatar": (content._download_image(a.get("profileImageUrl")) or "") if a.get("profileImageUrl") else "",
+        }
+    except Exception:  # noqa: BLE001 — 二次抓失败不致命,退回纯文本引用
+        return None
+
+
 def to_item(t):
     a = t.get("author") or {}
     handle = a.get("screenName", "") if isinstance(a, dict) else ""
@@ -129,8 +157,12 @@ def to_item(t):
     quote = None
     if isinstance(q, dict) and (q.get("text") or (q.get("author") or {}).get("screenName")):
         qa = q.get("author") or {}
+        detail = _fetch_quote_detail(q.get("id"))  # 二次抓:全文 + 配图 + 引用作者头像(父推不给)
+        qtext = (detail or {}).get("text") or html.unescape(q.get("text", "") or "")  # 优先全文,退回父推截断文本
         quote = {"name": (qa.get("name") or "").strip(), "handle": qa.get("screenName", ""),
-                 "text": re.sub(r"\s+", " ", _TCO.sub("", html.unescape(q.get("text", "") or ""))).strip()[:260]}
+                 "text": re.sub(r"\s+", " ", _TCO.sub("", qtext)).strip()[:500],
+                 "text_zh": "",  # 非中文引用的中译:Claude 会话回填(同 title_zh,见 ai-radar-scrape skill)
+                 "image": (detail or {}).get("image", ""), "avatar": (detail or {}).get("avatar", "")}
     meta = {"name": (a.get("name") or "").strip() if isinstance(a, dict) else "", "handle": handle,
             "avatar": av or "", "verified": bool(isinstance(a, dict) and a.get("verified")),
             "rt": rb, "quote": quote}
