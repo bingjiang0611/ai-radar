@@ -323,10 +323,13 @@ _HOME_JS = """
   cards=[].slice.call(document.querySelectorAll('.src-card')),
   secs=[].slice.call(document.querySelectorAll('.cat-section')),empty=document.getElementById('empty');
   if(!input)return;
+  function go(){var v=input.value.trim();if(v)location.href='/feed.html?q='+encodeURIComponent(v);}  // 回车 → 搜全部内容
+  input.addEventListener('keydown',function(e){if(e.key==='Enter')go();});
   input.addEventListener('input',function(){var q=input.value.trim().toLowerCase(),hit=0;
     cards.forEach(function(c){var ok=!q||(c.dataset.text||'').indexOf(q)>-1;c.style.display=ok?'':'none';if(ok)hit++;});
     secs.forEach(function(s){var any=[].slice.call(s.querySelectorAll('.src-card')).some(function(c){return c.style.display!=='none';});s.style.display=any?'':'none';});
-    if(empty)empty.style.display=hit?'none':'block';});})();
+    if(empty){empty.style.display=hit?'none':'block';
+      if(!hit&&input.value.trim())empty.textContent='没有匹配的来源 — 按回车搜「'+input.value.trim()+'」的全部内容 →';}});})();
 """
 
 _FEED_JS = """
@@ -335,11 +338,13 @@ _FEED_JS = """
     items=[].slice.call(document.querySelectorAll('.item')),days=[].slice.call(document.querySelectorAll('.day')),
     empty=document.getElementById('empty'),cat='',
     src=new URLSearchParams(location.search).get('source')||'',
+    qp=new URLSearchParams(location.search).get('q')||'',
     titleEl=document.getElementById('feed-title'),subEl=document.getElementById('feed-sub'),pillBox=document.getElementById('pills');
   if(src){if(titleEl)titleEl.textContent=src;if(subEl)subEl.textContent='单一来源 · 按时间倒序';if(pillBox)pillBox.style.display='none';}
-  function apply(){var q=(input&&input.value||'').trim().toLowerCase(),hit=0;
+  if(qp&&input){input.value=qp;if(titleEl)titleEl.textContent='搜索';if(subEl)subEl.textContent='搜全部内容(含推文)· 关键词「'+qp+'」';if(pillBox)pillBox.style.display='none';}
+  function apply(){var q=(input&&input.value||'').trim().toLowerCase(),searching=!!q,hit=0;
     items.forEach(function(el){
-      var inFeed=src?el.dataset.source===src:el.dataset.cat!=='推文';
+      var inFeed=src?el.dataset.source===src:(searching?true:el.dataset.cat!=='推文');
       var ok=inFeed&&(!cat||el.dataset.cat===cat)&&(!q||(el.dataset.text||'').indexOf(q)>-1);
       el.style.display=ok?'':'none';if(ok)hit++;});
     days.forEach(function(s){var any=[].slice.call(s.querySelectorAll('.item')).some(function(el){return el.style.display!=='none';});s.style.display=any?'':'none';});
@@ -599,7 +604,7 @@ def _render_home(items, descriptions, methods, interactions, out):
     build = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     page = (_head("AI Radar — 来源总览", _HOME_CSS)
-            + "\n<body>\n" + _top_header("home", stat=stat, search_ph="搜索来源…")
+            + "\n<body>\n" + _top_header("home", stat=stat, search_ph="搜来源 · 回车搜内容")
             + '\n<main class="wrap">\n' + front_html
             + f'\n<div class="dir">\n{dir_html}\n<p class="empty" id="empty">没有匹配的来源。</p>\n</div>\n</main>\n'
             + f'<footer class="foot"><span>AI&nbsp;RADAR</span><span class="sep">·</span>'
@@ -677,7 +682,7 @@ def _render_feed(items, interactions, out):
     pills_html = "".join(pills)
 
     page = (_head("AI Radar — 时间流", _FEED_CSS, maxw="760px")
-            + "\n<body>\n" + _top_header("feed", search_ph="搜索标题…")
+            + "\n<body>\n" + _top_header("feed", search_ph="搜索内容(中英)…")
             + '\n<main class="wrap"><div class="feed-head"><a href="/" class="back">← 总览</a>'
             + '<h1 id="feed-title">时间流</h1><div class="sub" id="feed-sub">全部来源 · 按时间倒序 · 不含推文</div>'
             + f'<div class="pills" id="pills">{pills_html}</div></div>\n'
