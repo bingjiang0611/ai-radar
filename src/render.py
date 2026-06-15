@@ -359,6 +359,8 @@ var tabs=[].slice.call(document.querySelectorAll('.tab')),panels=[].slice.call(d
 tabs.forEach(function(b){b.addEventListener('click',function(){
   tabs.forEach(function(x){x.classList.toggle('on',x===b);});
   panels.forEach(function(p){p.classList.toggle('on',p.id===b.dataset.panel);});});});
+(function(){var hp=(location.hash||'').slice(1);if(!hp)return;  // #zh/#sum/#en/#orig → 打开对应 tab(精读页深链用)
+  var b=tabs.filter(function(x){return x.dataset.panel==='p-'+hp;})[0];if(b)b.click();})();
 var copy=document.getElementById('copy');
 if(copy)copy.addEventListener('click',function(){var s=copy.querySelector('span');
   navigator.clipboard.writeText(copy.dataset.url).then(function(){s.textContent='已复制';setTimeout(function(){s.textContent='复制链接';},1500);});});
@@ -530,7 +532,8 @@ def _top_header(active, stat="", search_ph="搜索…"):
     stat_html = f'<span class="stat">{_e(stat)}</span>' if stat else ""
     return (f'<header class="top"><div class="top-in">'
             f'<a href="/" class="brand">{_BRAND_SVG}<span>AI&nbsp;Radar</span></a>'
-            f'<nav class="nav">{nav("/", "总览", "home")}{nav("/feed.html", "时间流", "feed")}</nav>'
+            f'<nav class="nav">{nav("/", "总览", "home")}{nav("/feed.html", "时间流", "feed")}'
+            f'{nav("/reads.html", "精读", "reads")}</nav>'
             f'{stat_html}'
             f'<div class="top-right"><div class="search">{_SEARCH_SVG}'
             f'<input id="search" type="search" placeholder="{_e(search_ph)}" autocomplete="off"></div>'
@@ -638,7 +641,7 @@ def _render_home(items, descriptions, methods, interactions, out):
 
 # ---------- 时间流 / 单来源 ----------
 
-def _card(item, mode="detail"):
+def _card(item, mode="detail", anchor=""):
     cat = item.get("category") or ""
     src = item.get("source_label", "")
     title = item.get("title_zh") or item.get("title") or ""
@@ -646,7 +649,7 @@ def _card(item, mode="detail"):
     if mode == "link":
         href, is_ext = _safe_url(item.get("url", "")), True
     else:
-        href, is_ext = f'/item/{_e(item.get("hash",""))}.html', False
+        href, is_ext = f'/item/{_e(item.get("hash",""))}.html{anchor}', False  # anchor 如 #zh:直接开中文翻译 tab
     ext_attr = ' target="_blank" rel="noopener"' if is_ext else ""
     if cat == "推文":  # 推文卡片:译文(主)+ 原文(英,弱化)+ 原推配图;链接直跳 X
         trans = item.get("title_zh") or item.get("title") or ""
@@ -711,6 +714,51 @@ def _render_feed(items, interactions, out):
             + '\n<p class="empty" id="empty">该分类暂无内容。</p>\n</main>\n'
             + f'<script>{_THEME_JS}{_FEED_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
     (out / "feed.html").write_text(page, encoding="utf-8")
+
+
+def _has_zh_deep(item):
+    """有人工中文深读内容:全文翻译(translation_md)或视频总结(summary_md)。"""
+    return bool((item.get("translation_md") or "").strip() or (item.get("summary_md") or "").strip())
+
+
+def _render_reads(items, interactions, out):
+    """「精读」=所有带全文翻译 / 视频总结的条目(文章 + 视频),按天分组、按时间倒序。
+    卡片深链到中文内容:有总结的视频→详情默认开「总结」;有译文的文章→ #zh 直接开「中文翻译」。"""
+    reads = [it for it in items if _has_zh_deep(it)]
+    sections, cur, buf = [], None, []
+    for it in reads:
+        d = _day(it)
+        if d != cur:
+            if buf:
+                sections.append((cur, buf))
+            cur, buf = d, []
+        buf.append(it)
+    if buf:
+        sections.append((cur, buf))
+
+    def anchor(it):
+        if (it.get("summary_md") or "").strip():
+            return ""        # 视频总结:详情页「总结」tab 已默认打开
+        return "#zh"          # 文章译文:直接开「中文翻译」tab
+
+    body = []
+    for day, its in sections:
+        rows = "\n".join(_card(it, interactions.get(it.get("source_id"), "detail"), anchor(it)) for it in its)
+        md = _fmt_md(day).replace("-", " / ")
+        body.append(f'<section class="day"><div class="day-label"><span class="d">{_e(md)}</span>'
+                    f'<span class="w">{_weekday(day)}</span><span class="rule"></span>'
+                    f'<span class="n">{len(its)} 条</span></div>\n{rows}\n</section>')
+    body_html = "\n".join(body) if body else '<p class="empty">还没有精读内容——挑中的文章补全文翻译、视频补总结后会出现在这里。</p>'
+
+    page = (_head("AI Radar — 精读", _FEED_CSS, maxw="760px")
+            + "\n<body>\n" + _top_header("reads", search_ph="搜索内容(中英)…")
+            + '\n<main class="wrap"><div class="feed-head"><a href="/" class="back">← 总览</a>'
+            + '<h1 id="feed-title">精读</h1>'
+            + f'<div class="sub">已翻译 / 已总结的中文深读内容 · {len(reads)} 篇 · 按时间倒序</div></div>\n'
+            + body_html
+            + '\n<p class="empty" id="empty">没有匹配的内容。</p>\n</main>\n'
+            + f'<script>{_THEME_JS}{_FEED_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
+    (out / "reads.html").write_text(page, encoding="utf-8")
 
 
 # ---------- 详情页 ----------
@@ -878,6 +926,7 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
     (out / "sources.html").unlink(missing_ok=True)
     _render_home(items, descriptions, methods or {}, interactions, out)
     _render_feed(items, interactions, out)
+    _render_reads(items, interactions, out)
     for it in items:
         if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":
             _render_detail(it, out, descriptions)
