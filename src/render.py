@@ -361,6 +361,10 @@ tabs.forEach(function(b){b.addEventListener('click',function(){
   panels.forEach(function(p){p.classList.toggle('on',p.id===b.dataset.panel);});});});
 (function(){var hp=(location.hash||'').slice(1);if(!hp)return;  // #zh/#sum/#en/#orig → 打开对应 tab(精读页深链用)
   var b=tabs.filter(function(x){return x.dataset.panel==='p-'+hp;})[0];if(b)b.click();})();
+(function(){if(new URLSearchParams(location.search).get('from')!=='reads')return;  // 从精读进来 → 返回回精读列表
+  var bk=document.getElementById('back');if(!bk)return;
+  bk.href='/reads.html';var s=bk.querySelector('span');if(s)s.textContent='← 精读';
+  var av=bk.querySelector('.av');if(av)av.style.display='none';})();
 var copy=document.getElementById('copy');
 if(copy)copy.addEventListener('click',function(){var s=copy.querySelector('span');
   navigator.clipboard.writeText(copy.dataset.url).then(function(){s.textContent='已复制';setTimeout(function(){s.textContent='复制链接';},1500);});});
@@ -737,9 +741,10 @@ def _render_reads(items, interactions, out):
         sections.append((cur, buf))
 
     def anchor(it):
+        # ?from=reads 让详情页把返回链接改成「← 精读」;hash 直接打开对应 tab
         if (it.get("summary_md") or "").strip():
-            return ""        # 视频总结:详情页「总结」tab 已默认打开
-        return "#zh"          # 文章译文:直接开「中文翻译」tab
+            return "?from=reads"          # 视频总结:详情页「总结」tab 已默认打开
+        return "?from=reads#zh"           # 文章译文:直接开「中文翻译」tab
 
     body = []
     for day, its in sections:
@@ -830,7 +835,7 @@ def _tabs(item):
 
 def _detail_header(src, cat_cls):
     return (f'<header class="top"><div class="top-in">'
-            f'<a href="{_e(_feed_href(src))}" class="back {cat_cls}">'
+            f'<a id="back" href="{_e(_feed_href(src))}" class="back {cat_cls}">'
             f'{_avatar(src, "av")}<span>← {_e(src) or "AI Radar"}</span></a>'
             f'<div class="top-right"><button class="icon-btn" id="theme" aria-label="切换深浅色">{_SUNMOON_SVG}</button></div>'
             f'</div></header>')
