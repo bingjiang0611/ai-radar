@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS items (
   content_html  TEXT DEFAULT '',
   translation_md TEXT DEFAULT '',
   video_url     TEXT DEFAULT '',
-  summary_md    TEXT DEFAULT ''
+  summary_md    TEXT DEFAULT '',
+  tweet_meta    TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
 CREATE INDEX IF NOT EXISTS idx_items_fetched  ON items(fetched_at);
@@ -48,7 +49,7 @@ def _conn():
 def init_db(conn=None):
     c = conn or _conn()
     c.executescript(SCHEMA)
-    for col in ("summary_md",):  # 给已存在的旧库补列(CREATE TABLE IF NOT EXISTS 不会加列)
+    for col in ("summary_md", "tweet_meta"):  # 给已存在的旧库补列(CREATE TABLE IF NOT EXISTS 不会加列)
         try:
             c.execute(f"ALTER TABLE items ADD COLUMN {col} TEXT DEFAULT ''")
         except sqlite3.OperationalError:
@@ -92,11 +93,11 @@ def insert_items(rows, source, conn=None):
     for r in rows:
         cur = c.execute(
             """INSERT OR IGNORE INTO items
-               (hash, source_id, source_label, category, title, summary, content_html, url, published_at, fetched_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               (hash, source_id, source_label, category, title, summary, content_html, url, published_at, fetched_at, tweet_meta)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (url_hash(r["url"]), source["id"], source["source_label"], source["category"],
              r["title"], r.get("summary", ""), r.get("content_html", ""),
-             r["url"], r.get("published_at", ""), now),
+             r["url"], r.get("published_at", ""), now, r.get("tweet_meta", "")),
         )
         if cur.rowcount > 0:
             inserted += 1

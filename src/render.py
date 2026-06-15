@@ -11,6 +11,7 @@
 """
 
 import html
+import json
 import re
 import shutil
 from datetime import datetime, timezone
@@ -52,6 +53,9 @@ _SUNMOON_SVG = ('<svg class="sun" viewBox="0 0 24 24" fill="none" stroke="curren
 _SEARCH_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
                '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4" stroke-linecap="round"/></svg>')
 _PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+_VERIFIED_SVG = ('<svg class="tw-vf" viewBox="0 0 22 22" aria-label="认证">'
+                 '<path fill="currentColor" d="M11 1l2.6 2 3.3-.2 1 3.1 2.6 2-1.2 3 1.2 3-2.6 2-1 3.1-3.3-.2L11 21l-2.6-2-3.3.2-1-3.1L1.5 14l1.2-3-1.2-3 2.6-2 1-3.1L8.4 3z"/>'
+                 '<path fill="#fff" d="M9.7 13.5l-2.3-2.3 1.1-1.1 1.2 1.2 3.6-3.6 1.1 1.1z"/></svg>')
 _EXTLINK_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
                 '<path d="M7 17L17 7M9 7h8v8" stroke-linecap="round" stroke-linejoin="round"/></svg>')
 _COPY_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
@@ -64,7 +68,11 @@ _TR_SVG = ('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-wi
 _THEME_PRESET = ("try{var t=localStorage.getItem('air-theme');"
                  "if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme:dark)').matches))"
                  "document.documentElement.setAttribute('data-theme','dark');"
-                 "else document.documentElement.setAttribute('data-theme','light');}catch(e){}")
+                 "else document.documentElement.setAttribute('data-theme','light');"
+                 "var fs=localStorage.getItem('air-fontsize');if(fs)document.documentElement.style.setProperty('--doc-size',fs);"
+                 "var dw=localStorage.getItem('air-width');if(dw)document.documentElement.style.setProperty('--doc-maxw',dw);"
+                 "var cv=localStorage.getItem('air-canvas');if(cv==='sepia')document.documentElement.setAttribute('data-canvas','sepia');"
+                 "}catch(e){}")
 
 _FONT_LINKS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
                '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
@@ -86,7 +94,14 @@ _BASE_CSS = """
   --serif:'Newsreader','Iowan Old Style','Source Serif 4',Charter,Georgia,'Songti SC',serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',system-ui,sans-serif;
   --mono:ui-monospace,'SF Mono','JetBrains Mono','Menlo',monospace;
-  --maxw:1080px;
+  --maxw:1080px;--doc-size:18.5px;--doc-maxw:680px;
+}
+/* sepia 阅读底(详情页用,localStorage 持久化) */
+[data-canvas="sepia"]{
+  --bg:oklch(96.5% 0.014 80);--surface:oklch(98% 0.012 80);--surface-2:oklch(94.5% 0.016 80);
+  --inset:oklch(93% 0.018 80);--fg:oklch(30% 0.025 60);--fg-2:oklch(46% 0.022 60);
+  --muted:oklch(54% 0.018 70);--faint:oklch(64% 0.014 70);--border:oklch(89% 0.014 80);
+  --border-2:oklch(83% 0.018 80);
 }
 [data-theme="dark"]{
   --bg:oklch(18.5% 0.016 262);--surface:oklch(21.5% 0.017 262);--surface-2:oklch(24% 0.017 262);
@@ -185,9 +200,52 @@ _HOME_CSS = """
 .sc-foot{margin-top:auto;padding-top:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
 .sc-foot .n{color:var(--fg-2);background:var(--inset);padding:2px 7px;border-radius:6px}
 .sc-foot .b{color:var(--muted);border:1px solid var(--border-2);padding:1px 6px;border-radius:6px;letter-spacing:.04em}
+/* ===== v2 增益:Today on Radar 雷达条 + Editor's Cut 副位 + 来源卡片预览行 ===== */
+.radar{display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center;padding:18px 22px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);margin-bottom:30px}
+.radar-l{display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--border);padding-right:24px}
+.radar-l .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.radar-l .v{font-family:var(--serif);font-size:30px;font-weight:500;letter-spacing:-.01em;line-height:1}
+.radar-l .v sup{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent-2);margin-left:6px;vertical-align:14px}
+.radar-l .s{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:5px}
+.radar-bars{display:grid;grid-template-columns:repeat(8,1fr);gap:14px;height:62px;align-items:end}
+.radar .bar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;cursor:pointer;height:100%;text-decoration:none}
+.radar .bar:hover .bar-fill{filter:brightness(1.1);opacity:1}
+.bar-fill{width:100%;background:var(--cat,var(--accent));border-radius:3px 3px 0 0;min-height:3px;transition:.16s;opacity:.85}
+.bar-label{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
+.bar-n{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--fg)}
+.radar-r{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.04em}
+.radar-r .pulse{display:flex;align-items:center;gap:6px;color:var(--accent-2);font-weight:600;letter-spacing:.05em}
+.radar-r .pulse::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+.front-row{display:grid;grid-template-columns:2fr 1fr;gap:18px}
+.cut{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 22px;display:flex;flex-direction:column;box-shadow:var(--shadow);position:relative;overflow:hidden;text-decoration:none}
+.cut::before{content:"";position:absolute;left:22px;right:22px;top:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2),transparent)}
+.cut .ek{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-2);font-weight:600;display:flex;align-items:center;gap:7px;margin-bottom:14px}
+.cut .ek svg{width:11px;height:11px}
+.cut .meta{margin-bottom:8px}
+.cut h3{font-family:var(--serif);font-weight:600;font-size:21px;line-height:1.24;letter-spacing:-.01em;margin-bottom:8px}
+.cut:hover h3{color:var(--accent-2)}
+.cut .ed-note{font-family:var(--serif);font-style:italic;font-size:14px;line-height:1.6;color:var(--muted);border-top:1px solid var(--border);padding-top:12px;margin-top:auto}
+.cut .ed-note::before{content:"「";color:var(--accent-line);font-size:20px;margin-right:2px;vertical-align:-3px}
+.cut .ed-note::after{content:"」";color:var(--accent-line);font-size:20px;margin-left:2px;vertical-align:-3px}
+.cut .ed-foot{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:10px}
+.cut .ed-foot .who{color:var(--fg-2)}
+.cut .ed-auto{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.04em}
+/* 来源卡片预览行(latest_title) */
+.sc-peek{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);font-family:var(--serif);font-size:13px;line-height:1.4;color:var(--fg-2);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.sc-peek::before{content:"›";color:var(--cat,var(--accent-line));font-family:var(--mono);font-weight:700;margin-right:6px;font-size:14px}
+.src-card:hover .sc-peek{color:var(--fg);-webkit-line-clamp:2}
+.sc-foot .fresh{color:var(--accent-2);font-weight:600;letter-spacing:.04em}
+.kicker .more{font-family:var(--mono);font-size:11px;color:var(--accent-2);letter-spacing:.04em;text-decoration:none}
 @media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.front{grid-template-columns:1fr}
-  .lead{border-right:0;border-bottom:1px solid var(--border);min-height:0}.lead h3{font-size:27px}}
-@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}}
+  .lead{border-right:0;border-bottom:1px solid var(--border);min-height:0}.lead h3{font-size:27px}
+  .front-row{grid-template-columns:1fr}
+  .radar{grid-template-columns:1fr;gap:14px}
+  .radar-l{border-right:0;border-bottom:1px solid var(--border);padding-right:0;padding-bottom:14px;flex-direction:row;align-items:baseline;gap:16px}
+  .radar-r{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px}}
+@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}
+  .radar-bars{gap:8px}.bar-label{font-size:8.5px}
+  .radar{padding:14px 16px}}
 """
 
 _FEED_CSS = """
@@ -234,10 +292,50 @@ _FEED_CSS = """
 .it-orig{color:var(--faint);font-size:13px;line-height:1.55;margin-top:5px;font-style:italic;font-family:var(--serif)}
 .it-media{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
 .it-media img{max-height:200px;max-width:100%;border-radius:10px;border:1px solid var(--border);object-fit:cover}
+.tw .avatar-img{border-radius:50%;background:var(--surface-2);object-fit:cover}
+.it-meta .tw-name{font-weight:600;color:var(--fg);display:inline-flex;align-items:center;gap:3px}
+.tw-vf{width:14.5px;height:14.5px;color:var(--accent-2);flex:none}
+.it-meta .tw-handle{color:var(--faint);font-weight:400}
+.it-meta .tw-rt{color:var(--faint);font-size:11.5px}
+.tw-quote{margin-top:10px;border:1px solid var(--border);border-radius:13px;padding:9px 12px;background:var(--surface-2)}
+.tw-quote .tw-q-head{font-size:13px;font-weight:600;color:var(--fg-2);margin-bottom:2px}
+.tw-quote .tw-q-head .tw-handle{font-weight:400;color:var(--faint)}
+.tw-quote .tw-q-text{font-size:13.5px;line-height:1.5;color:var(--fg-2);white-space:pre-wrap}
 .play{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:var(--cat)}
 .play svg{width:14px;height:14px}
+/* ===== v2 增益:左侧迷你日期游标 + day-label 分类点位 + 已精读徽章 ===== */
+.shell{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:140px 1fr;gap:36px;padding:26px 24px 56px}
+.shell>.wrap{min-width:0;max-width:none;padding:0}
+.rail{position:sticky;top:68px;align-self:start;max-height:calc(100vh - 96px);overflow-y:auto;padding:2px 0;font-family:var(--mono)}
+.rail-k{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.rail-day{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:6px 0;color:var(--muted);font-size:11px;letter-spacing:.04em;cursor:pointer;transition:.14s;position:relative;text-decoration:none}
+.rail-day .d{font-weight:600;color:var(--fg-2);font-size:11.5px}
+.rail-day .w{font-size:10px;color:var(--faint);margin-left:6px}
+.rail-day .vol{width:46px;height:5px;background:var(--inset);border-radius:3px;overflow:hidden;flex:none}
+.rail-day .vol span{display:block;height:100%;background:var(--accent-line);border-radius:3px;transition:.14s}
+.rail-day:hover{color:var(--fg)}
+.rail-day:hover .vol span{background:var(--accent-2)}
+.rail-day.on .d{color:var(--accent-2)}
+.rail-day.on .vol span{background:var(--accent)}
+.rail-day::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:3px;height:14px;border-radius:2px;background:transparent;transition:.14s}
+.rail-day:hover::before,.rail-day.on::before{background:var(--accent)}
+.day-label{flex-direction:column;align-items:stretch;gap:6px}
+.day-label-row{display:flex;align-items:center;gap:11px}
+.day-label-row::before{content:"";width:4px;height:20px;border-radius:2px;background:var(--accent-2)}
+.day-label::before{content:none}
+.day-cats{display:flex;gap:14px;flex-wrap:wrap;padding-left:14px;font-family:var(--mono);font-size:10.5px}
+.day-cats .dc{display:flex;align-items:center;gap:5px;color:var(--muted)}
+.day-cats .dc .dot{width:5px;height:5px;border-radius:50%;background:var(--cat,var(--faint))}
+.day-cats .dc .n{color:var(--fg-2);font-weight:600;letter-spacing:.04em}
+.day-cats .dc.zero{opacity:.32}
+.it-meta .read{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--accent-2);background:var(--accent-soft);padding:1px 6px;border-radius:5px;text-transform:uppercase}
+@media(max-width:880px){
+  .shell{grid-template-columns:1fr;gap:18px;padding:20px 24px 56px}
+  .rail{display:none}}
 @media(max-width:560px){.wrap{padding:20px 16px 48px}
-  .feed-head h1{font-size:25px}.it-meta .time{margin-left:0}.day-label{top:52px}}
+  .feed-head h1{font-size:25px}.it-meta .time{margin-left:0}.day-label{top:52px}
+  .shell{padding:18px 16px 48px}
+  .day-cats{padding-left:0;gap:10px}}
 """
 
 _DETAIL_CSS = """
@@ -269,7 +367,7 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 .tab{font-size:13px;font-weight:500;color:var(--muted);padding:6px 16px;border-radius:7px;cursor:pointer;border:0;background:transparent;font-family:var(--sans);transition:.15s}
 .tab.on{background:var(--surface);color:var(--fg);box-shadow:var(--shadow)}
 .panel{display:none}.panel.on{display:block}
-.doc{font-family:var(--serif);font-size:18.5px;line-height:1.78;color:var(--fg);margin-top:14px}
+.doc{font-family:var(--serif);font-size:var(--doc-size);line-height:1.78;color:var(--fg);margin-top:14px}
 .doc p{margin:1.05em 0}
 .doc a{color:var(--accent-2);text-decoration:underline;text-underline-offset:2.5px;text-decoration-thickness:1px;text-decoration-color:var(--accent-line)}
 .doc a:hover{text-decoration-color:var(--accent-2)}
@@ -311,9 +409,45 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 .facade .ov .sub2{font-size:11px;color:oklch(85% 0 0 / .8);font-family:var(--mono)}
 .facade .hint{position:absolute;top:18px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:oklch(92% 0 0 / .8);background:oklch(12% 0 0 / .45);padding:4px 9px;border-radius:999px}
+/* ===== v2 增益:阅读偏好控制条 + 右浮 outline + 视频章节时间戳 ===== */
+/* 顶栏右侧 reader 工具条 */
+.reader{display:inline-flex;align-items:center;gap:0;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;height:34px;overflow:hidden;font-family:var(--mono);font-size:11.5px;margin-right:4px}
+.reader button{height:100%;padding:0 10px;background:transparent;border:0;color:var(--fg-2);font-family:var(--mono);font-size:11.5px;cursor:pointer;letter-spacing:.02em;transition:.14s;display:flex;align-items:center;gap:4px}
+.reader button:hover{background:var(--inset);color:var(--fg)}
+.reader button+button{border-left:1px solid var(--border)}
+.reader .opt[data-on="1"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
+/* 文章态:.wrap 外面包 .shell-doc 双列(正文 + outline) */
+.shell-doc{max-width:920px;margin:0 auto;display:grid;grid-template-columns:var(--doc-maxw) 200px;gap:60px;padding:0 24px;align-items:start;justify-content:center}
+.shell-doc>.wrap{max-width:none;margin:0;padding:34px 0 80px;min-width:0}
+.outline{position:sticky;top:64px;align-self:start;max-height:calc(100vh - 96px);overflow-y:auto;padding:38px 0 6px 18px;border-left:1px solid var(--border);font-family:var(--sans);font-size:12.5px}
+.outline-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.outline ol{list-style:none;padding:0;margin:0}
+.outline li{margin:8px 0;line-height:1.45;position:relative}
+.outline li.h3{padding-left:14px;font-size:12px}
+.outline a{display:block;color:var(--muted);transition:.14s;padding-right:6px;text-decoration:none}
+.outline a:hover{color:var(--fg)}
+.outline li.on>a{color:var(--accent-2);font-weight:600}
+.outline li.on::before{content:"";position:absolute;left:-19px;top:6px;width:3px;height:14px;border-radius:2px;background:var(--accent)}
+.doc h1,.doc h2,.doc h3,.doc h4{scroll-margin-top:80px}
+/* 视频态:facade 角标(时长/发布日期/HD) + 总结 tab 章节时间戳跳转条 */
+.facade .dur{position:absolute;right:14px;bottom:14px;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.04em;background:oklch(12% 0 0 / .82);color:#fff;padding:3px 8px;border-radius:6px;backdrop-filter:blur(2px)}
+.facade .pub{position:absolute;top:18px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:oklch(92% 0 0 / .85);background:oklch(12% 0 0 / .55);padding:4px 9px;border-radius:999px;backdrop-filter:blur(2px)}
+.chapters{display:flex;gap:8px;overflow-x:auto;padding:14px 0 6px;margin-bottom:8px;border-bottom:1px solid var(--border);scrollbar-width:thin}
+.chapters::-webkit-scrollbar{height:4px}
+.chapters::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+.chap{flex:none;display:flex;flex-direction:column;gap:3px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:.14s;min-width:140px;text-decoration:none}
+.chap:hover{border-color:var(--accent-line);background:var(--surface-2)}
+.chap .ts{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--accent-2)}
+.chap .ttl{font-family:var(--serif);font-size:14px;font-weight:500;line-height:1.3;letter-spacing:-.005em;color:var(--fg)}
+.chap.on{border-color:var(--accent);background:var(--accent-soft)}
+.chap.on .ttl{color:var(--accent-2)}
+.doc h2 .ts{font-family:var(--mono);font-size:.7em;font-weight:600;color:var(--accent-2);background:var(--accent-soft);padding:2px 8px;border-radius:5px;letter-spacing:.04em;margin-right:9px;vertical-align:3px}
+@media(max-width:1080px){.shell-doc{grid-template-columns:1fr;gap:0}.outline{display:none}}
 @media(max-width:560px){.top-in{padding:10px 16px}.wrap{padding:24px 18px 64px}
-  h1.title{font-size:27px}.subtitle{font-size:17px}.doc{font-size:17.5px}.read-time{display:none}
-  .facade{border-radius:12px}.facade .play .pbtn{width:68px;height:48px}}
+  h1.title{font-size:27px}.subtitle{font-size:17px}.read-time{display:none}
+  .facade{border-radius:12px}.facade .play .pbtn{width:68px;height:48px}
+  .reader{display:none}
+  .shell-doc{padding:0 18px}.shell-doc>.wrap{padding:24px 0 64px}}
 """
 
 # ---------- JS ----------
@@ -355,6 +489,13 @@ _FEED_JS = """
   pills.forEach(function(p){p.addEventListener('click',function(){pills.forEach(function(x){x.classList.toggle('on',x===p);});cat=p.dataset.cat||'';apply();});});
   if(input)input.addEventListener('input',apply);
   apply();})();
+/* ===== v2:rail 左侧日期游标滚动联动 ===== */
+(function(){var rail=document.getElementById('rail');if(!rail)return;
+  var links=[].slice.call(rail.querySelectorAll('.rail-day'));
+  var sections=links.map(function(l){return document.getElementById('d-'+l.dataset.day);}).filter(Boolean);
+  function setActive(id){links.forEach(function(l){l.classList.toggle('on',l.dataset.day===id);});}
+  window.addEventListener('scroll',function(){var top=window.scrollY+120,cur='';
+    sections.forEach(function(s){if(s.offsetTop<=top)cur=s.id.slice(2);});if(cur)setActive(cur);},{passive:true});})();
 """
 
 _DETAIL_JS = """
@@ -387,6 +528,39 @@ if(bar)window.addEventListener('scroll',function(){var h=document.documentElemen
     f.replaceWith(ifr);
   },{once:true});
 });
+/* ===== v2:Reader 控制(A-/A+/宽窄/sepia) + outline 联动 + chapters 联动 ===== */
+(function(){var root=document.documentElement;
+  var fd=document.getElementById('font-down'),fu=document.getElementById('font-up'),wt=document.getElementById('width-toggle'),sp=document.getElementById('sepia');
+  if(!(fd||fu||wt||sp))return;
+  var sizes=[16,17.5,18.5,20,22],cur=2;
+  var saved=localStorage.getItem('air-fontsize');
+  if(saved){var idx=sizes.indexOf(parseFloat(saved));if(idx>-1)cur=idx;}
+  function applySize(){var v=sizes[cur]+'px';root.style.setProperty('--doc-size',v);try{localStorage.setItem('air-fontsize',v);}catch(e){}}
+  if(fd)fd.addEventListener('click',function(){if(cur>0){cur--;applySize();}});
+  if(fu)fu.addEventListener('click',function(){if(cur<sizes.length-1){cur++;applySize();}});
+  if(wt){var sw=localStorage.getItem('air-width');if(sw==='820px'){wt.dataset.on='1';root.style.setProperty('--doc-maxw','820px');}
+    wt.addEventListener('click',function(){var on=wt.dataset.on==='1';
+      if(on){wt.dataset.on='0';root.style.setProperty('--doc-maxw','680px');try{localStorage.setItem('air-width','680px');}catch(e){}}
+      else{wt.dataset.on='1';root.style.setProperty('--doc-maxw','820px');try{localStorage.setItem('air-width','820px');}catch(e){}}});}
+  if(sp){if(localStorage.getItem('air-canvas')==='sepia')sp.dataset.on='1';
+    sp.addEventListener('click',function(){var on=sp.dataset.on==='1';
+      if(on){sp.dataset.on='0';root.removeAttribute('data-canvas');try{localStorage.removeItem('air-canvas');}catch(e){}}
+      else{sp.dataset.on='1';root.setAttribute('data-canvas','sepia');try{localStorage.setItem('air-canvas','sepia');}catch(e){}}});}})();
+(function(){var outline=document.getElementById('outline');if(!outline)return;
+  var anchors=[].slice.call(outline.querySelectorAll('a'));
+  var heads=anchors.map(function(a){return document.getElementById(a.getAttribute('href').slice(1));}).filter(Boolean);
+  function setActive(id){anchors.forEach(function(a){a.parentElement.classList.toggle('on',a.getAttribute('href')==='#'+id);});}
+  window.addEventListener('scroll',function(){var top=window.scrollY+120,cur='';
+    heads.forEach(function(h){if(h.offsetTop<=top)cur=h.id;});if(cur)setActive(cur);},{passive:true});})();
+(function(){var chaps=[].slice.call(document.querySelectorAll('.chap'));if(!chaps.length)return;
+  chaps.forEach(function(c){c.addEventListener('click',function(e){
+    e.preventDefault();var id=c.dataset.anchor;var h=document.getElementById(id);if(!h)return;
+    chaps.forEach(function(x){x.classList.toggle('on',x===c);});
+    window.scrollTo({top:h.offsetTop-80,behavior:'smooth'});});});
+  var heads=chaps.map(function(c){return document.getElementById(c.dataset.anchor);}).filter(Boolean);
+  window.addEventListener('scroll',function(){var top=window.scrollY+150,cur='';
+    heads.forEach(function(h){if(h.offsetTop<=top)cur=h.id;});
+    if(cur)chaps.forEach(function(c){c.classList.toggle('on',c.dataset.anchor===cur);});},{passive:true});})();
 """
 
 
@@ -551,6 +725,8 @@ def _top_header(active, stat="", search_ph="搜索…"):
 # ---------- 首页 ----------
 
 def _render_home(items, descriptions, methods, interactions, out):
+    now = datetime.now(timezone.utc)  # v2:统一时间锚,供 today 雷达 / fresh 卡片 / 7 日均使用
+    # v2:stats 顺序按时间倒序遍历(items 已倒序),第一次见某源即为其最新条目→记 latest_title / latest_dt(用于来源卡 sc-peek 与 fresh 徽章)
     stats = {}
     for it in items:
         lbl = it.get("source_label", "")
@@ -558,7 +734,14 @@ def _render_home(items, descriptions, methods, interactions, out):
             continue
         s = stats.get(lbl)
         if s is None:
-            stats[lbl] = {"count": 1, "latest": _day(it), "category": it.get("category", ""), "src_id": it.get("source_id", "")}
+            stats[lbl] = {
+                "count": 1,
+                "latest": _day(it),
+                "latest_dt": _effective_dt(it),
+                "latest_title": it.get("title_zh") or it.get("title") or "",
+                "category": it.get("category", ""),
+                "src_id": it.get("source_id", ""),
+            }
         else:
             s["count"] += 1
 
@@ -571,6 +754,72 @@ def _render_home(items, descriptions, methods, interactions, out):
         cat = it.get("category", "")
         return (f'<div class="meta"><span class="dot"></span><span class="src">{_e(it.get("source_label",""))}</span>'
                 f'<span>·</span><span>{_e(cat)}</span></div>')
+
+    # === v2 增益:Today on Radar 雷达条 ===
+    today = now.strftime("%Y-%m-%d")
+    today_items = [it for it in items if _day(it) == today]
+    cat_today = {c: 0 for c in _CAT_ORDER}
+    for it in today_items:
+        c = it.get("category", "")
+        if c in cat_today:
+            cat_today[c] += 1
+    today_total = sum(cat_today.values())
+    # 7 日均(不含今天)用于同比
+    last7 = {it.get("hash"): _effective_dt(it) for it in items}
+    week_total = sum(
+        1 for it in items
+        if (_effective_dt(it) and _MIN_DT < _effective_dt(it) < now
+            and (now - _effective_dt(it)).days < 8 and _day(it) != today)
+    )
+    week_avg = week_total / 7 if week_total else 0
+    diff_pct = int(round((today_total - week_avg) / week_avg * 100)) if week_avg else 0
+    diff_html = (f'<span>↑ {diff_pct}% vs 7 日均</span>' if diff_pct > 0
+                 else f'<span>↓ {abs(diff_pct)}% vs 7 日均</span>' if diff_pct < 0
+                 else '<span>= 7 日均</span>')
+    max_cat = max(cat_today.values()) if cat_today.values() else 1
+    last4h = sum(1 for it in today_items
+                 if _effective_dt(it) != _MIN_DT and (now - _effective_dt(it)).total_seconds() < 4 * 3600)
+    pulse_html = f'<span class="pulse">LIVE · 最近 4 小时 +{last4h}</span>' if last4h else '<span class="pulse">LIVE · 待更新</span>'
+    bars_html = ""
+    for cat in _CAT_ORDER:
+        n = cat_today.get(cat, 0)
+        h = max(3, int(n / max_cat * 100)) if max_cat else 3
+        bars_html += (f'<a class="bar {_cat_class(cat)}" href="{_e(_feed_href("") if False else "/feed.html")}" title="{_e(cat)} {n} 条">'
+                      f'<span class="bar-n">{n}</span><span class="bar-fill" style="height:{h}%"></span>'
+                      f'<span class="bar-label">{_e(cat)}</span></a>')
+    wd = _WEEKDAY[now.weekday()] if 0 <= now.weekday() < 7 else ""
+    radar_html = (f'<section class="radar" aria-label="今日上新雷达">'
+                  f'<div class="radar-l"><div class="k">Today on Radar</div>'
+                  f'<div class="v">{today_total}</div>'
+                  f'<div class="s">{today} · {wd}</div></div>'
+                  f'<div class="radar-bars">{bars_html}</div>'
+                  f'<div class="radar-r">{pulse_html}{diff_html}<span>构建 {now.strftime("%m-%d %H:%M")}</span></div>'
+                  f'</section>') if today_total else ""
+
+    # === v2 增益:Editor's Cut 副位(自动挑读)——从人工挑过的条目里挑近期最贴合的一条,不假装编辑批注 ===
+    pick_pool = [it for it in items
+                 if it is not lead and _has_zh_deep(it) and it.get("category") != "推文"]
+    pick = pick_pool[0] if pick_pool else None
+    cut_html = ""
+    if pick:
+        ph, _ = _item_href(pick, interactions)
+        pt = pick.get("title_zh") or pick.get("title") or ""
+        ps_raw = (pick.get("summary_zh") or pick.get("summary") or "").strip()
+        ps = (ps_raw[:78] + "…") if len(ps_raw) > 78 else ps_raw
+        pcat = pick.get("category", "")
+        pwhen = _fmt_md(_day(pick))
+        prt = _read_time(pick.get("content_html", ""))
+        kind = "已翻译全文" if (pick.get("translation_md") or "").strip() else ("已总结" if (pick.get("summary_md") or "").strip() else "已搬运 B 站")
+        cut_html = (f'<a class="cut {_cat_class(pcat)}" href="{ph}?from=reads">'
+                    f'<div class="ek"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+                    f'<path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.4 2.4-7.4L2 9.4h7.6L12 2z" stroke-linejoin="round"/></svg>'
+                    f"Editor's Cut · 精读挑读</div>"
+                    f'<div class="meta"><span class="dot"></span><span class="src">{_e(pick.get("source_label",""))}</span>'
+                    f'<span>·</span><span>{_e(pcat)}</span></div>'
+                    f'<h3>{_e(pt)}</h3>'
+                    f'{f"<p class=\"ed-note\">{_e(ps)}</p>" if ps else ""}'
+                    f'<div class="ed-foot"><span class="ed-auto">自动挑选 · {_e(kind)}</span>'
+                    f'<span>{_e(pwhen)}{" · " + prt if prt else ""}</span></div></a>')
 
     front_html = ""
     if lead:
@@ -593,9 +842,17 @@ def _render_home(items, descriptions, methods, interactions, out):
             mt = it.get("title_zh") or it.get("title") or ""
             mini_html += (f'<a class="mini {_cat_class(it.get("category",""))}" href="{mh}">'
                           f'{front_meta(it)}<h4>{_e(mt)}</h4></a>')
-        front_html = (f'<section><div class="kicker"><h2>最新 · Latest</h2>'
-                      f'<span class="cnt">跨 {len(stats)} 源</span><span class="rule"></span></div>'
-                      f'<div class="front">{lead_html}<div class="mini-list">{mini_html}</div></div></section>')
+        kicker = (f'<div class="kicker"><h2>最新 · Latest</h2>'
+                  f'<span class="cnt">跨 {len(stats)} 源</span><span class="rule"></span>'
+                  f'<a href="/feed.html" class="more">看全部 →</a></div>')
+        # 有 cut 时用 .front-row 双列;没有就退回原单列
+        if cut_html:
+            front_html = (f'<section>{kicker}<div class="front-row">'
+                          f'<div class="front">{lead_html}<div class="mini-list">{mini_html}</div></div>'
+                          f'{cut_html}</div></section>')
+        else:
+            front_html = (f'<section>{kicker}'
+                          f'<div class="front">{lead_html}<div class="mini-list">{mini_html}</div></div></section>')
 
     # 来源目录
     by_cat = {}
@@ -603,19 +860,31 @@ def _render_home(items, descriptions, methods, interactions, out):
         by_cat.setdefault(s["category"], []).append((lbl, s))
     ordered = [c for c in _CAT_ORDER if c in by_cat] + [c for c in by_cat if c not in _CAT_ORDER]
 
+    def _fresh(dt):
+        """≤24h 用 accent 'Nh 前' 加深为 fresh;否则 mono 灰 'MM-DD'。"""
+        if dt and dt != _MIN_DT:
+            delta = (now - dt).total_seconds()
+            if 0 <= delta < 24 * 3600:
+                h = max(1, int(delta // 3600))
+                return f'<span class="fresh">{h}h 前</span>'
+        s = (dt.strftime("%Y-%m-%d") if dt and dt != _MIN_DT else "")
+        return f'<span>{_e(s[5:] or s)}</span>'
+
     def card(lbl, s):
         cat = s["category"]
         desc = descriptions.get(lbl, "")
-        blob = _e(f"{lbl} {desc} {cat}".lower())
-        desc_html = f'<p>{_e(desc)}</p>' if desc else ""
+        peek = s.get("latest_title") or ""
+        blob = _e(f"{lbl} {desc} {cat} {peek}".lower())
+        desc_html = f'<p class="sc-desc">{_e(desc)}</p>' if desc else ""
+        peek_html = f'<div class="sc-peek">{_e(peek)}</div>' if peek else ""
         m = methods.get(lbl, "")
         b_html = f'<span class="b" title="入口B:无 RSS,须在 Claude 会话里抓取">入口B</span>' if m else ""
         return (f'<a class="src-card {_cat_class(cat)}" href="{_e(_feed_href(lbl))}" data-text="{blob}">'
                 f'<div class="sc-top">{_avatar(lbl)}<div>'
                 f'<div class="sc-name">{_e(lbl)}</div>'
                 f'<div class="sc-cat"><span class="dot"></span>{_e(cat)}</div></div></div>'
-                f'{desc_html}'
-                f'<div class="sc-foot"><span>最近更新 {_e(s["latest"][5:] or s["latest"])}</span>'
+                f'{desc_html}{peek_html}'
+                f'<div class="sc-foot">{_fresh(s.get("latest_dt"))}'
                 f'<span style="display:flex;gap:6px;align-items:center">{b_html}<span class="n">{s["count"]} 条</span></span></div></a>')
 
     sections = []
@@ -636,7 +905,7 @@ def _render_home(items, descriptions, methods, interactions, out):
 
     page = (_head("AI Radar — 来源总览", _HOME_CSS)
             + "\n<body>\n" + _top_header("home", stat=stat, search_ph="搜来源 · 回车搜内容")
-            + '\n<main class="wrap">\n' + front_html
+            + '\n<main class="wrap">\n' + radar_html + "\n" + front_html
             + f'\n<div class="dir">\n{dir_html}\n<p class="empty" id="empty">没有匹配的来源。</p>\n</div>\n</main>\n'
             + f'<footer class="foot"><span>AI&nbsp;RADAR</span><span class="sep">·</span>'
             + f'<span>本地聚合 · 无登录分享</span><span class="sep">·</span>'
@@ -648,6 +917,8 @@ def _render_home(items, descriptions, methods, interactions, out):
 
 # ---------- 时间流 / 单来源 ----------
 
+_TW_PFX = re.compile(r"^@\S+(?:\s*🔁\s*@\S+)?：")  # 推文正文前缀 "@handle：" / "@A 🔁 @B：",卡片里移到 meta 行后剥掉
+
 def _card(item, mode="detail", anchor=""):
     cat = item.get("category") or ""
     src = item.get("source_label", "")
@@ -658,20 +929,40 @@ def _card(item, mode="detail", anchor=""):
     else:
         href, is_ext = f'/item/{_e(item.get("hash",""))}.html{anchor}', False  # anchor 如 #zh:直接开中文翻译 tab
     ext_attr = ' target="_blank" rel="noopener"' if is_ext else ""
-    if cat == "推文":  # 推文卡片:译文(主)+ 原文(英,弱化)+ 原推配图;链接直跳 X
+    if cat == "推文":  # 推文卡片:真头像 + 作者名@handle(认证)+ 译文(主)+ 原文(弱化)+ 配图 + 被引用推卡;直跳 X
+        try:
+            tm = json.loads(item.get("tweet_meta") or "{}")
+        except (ValueError, TypeError):
+            tm = {}
         trans = item.get("title_zh") or item.get("title") or ""
         orig = item.get("title") or ""
+        trans_t = _TW_PFX.sub("", trans).strip()   # 去正文前缀 "@handle："(作者已移到 meta 行)
+        orig_t = _TW_PFX.sub("", orig).strip()
+        handle, name = tm.get("handle", ""), (tm.get("name") or "").strip()
+        name = name or (f"@{handle}" if handle else src)
+        avatar = (f'<img class="avatar-img tw-av" src="{_e(tm["avatar"])}" alt="" loading="lazy">'
+                  if tm.get("avatar") else _avatar(name or src))
+        vf = _VERIFIED_SVG if tm.get("verified") else ""
+        handle_html = f'<span class="tw-handle">@{_e(handle)}</span>' if handle else ""
+        rt_html = f'<span class="tw-rt">🔁 @{_e(tm.get("rt"))}</span>' if tm.get("rt") else ""
         tw_ext = '<span class="ext">↗</span>' if is_ext else ""
-        orig_html = f'<div class="it-orig">{_e(orig)}</div>' if orig and orig != trans else ""
+        orig_html = f'<div class="it-orig">{_e(orig_t)}</div>' if orig_t and orig_t != trans_t else ""
         media = _lazy_imgs(item.get("content_html") or "")
         media_html = f'<div class="it-media">{media}</div>' if media else ""
-        return (f'<a class="item {_cat_class(cat)}" href="{href}"{ext_attr} '
+        q = tm.get("quote") or {}
+        quote_html = ""
+        if q.get("text") or q.get("handle"):
+            qn = (q.get("name") or "").strip() or (f"@{q.get('handle','')}")
+            qh = f' <span class="tw-handle">@{_e(q.get("handle"))}</span>' if q.get("handle") else ""
+            quote_html = (f'<div class="tw-quote"><div class="tw-q-head">{_e(qn)}{qh}</div>'
+                          f'<div class="tw-q-text">{_e(q.get("text", ""))}</div></div>')
+        return (f'<a class="item {_cat_class(cat)} tw" href="{href}"{ext_attr} '
                 f'data-cat="{_e(cat)}" data-source="{_e(src)}" data-text="{_e(f"{trans} {orig} {src}".lower())}">'
-                f'{_avatar(src)}<div class="it-body">'
-                f'<div class="it-meta"><span class="src">{_e(src)}</span>'
+                f'{avatar}<div class="it-body">'
+                f'<div class="it-meta"><span class="tw-name">{_e(name)}{vf}</span>{handle_html}{rt_html}'
                 f'<span class="tag"><span class="dot"></span>{_e(cat)}</span>'
                 f'<span class="time">{_e(_fmt_time(item))}</span></div>'
-                f'<div class="it-title">{_e(trans)}{tw_ext}</div>{orig_html}{media_html}</div></a>')
+                f'<div class="it-title">{_e(trans_t)}{tw_ext}</div>{orig_html}{media_html}{quote_html}</div></a>')
     # 搜索域:中英都进(title_zh 中译 + title 英文原 + 两版摘要),这样英文关键词也能搜到
     blob = _e(f"{item.get('title','')} {item.get('title_zh','')} {item.get('summary','')} {item.get('summary_zh','')} {src}".lower())
     play = f'<span class="play">{_PLAY_SVG}</span>' if cat == "视频" else ""
@@ -698,14 +989,51 @@ def _render_feed(items, interactions, out):
     if buf:
         sections.append((cur, buf))
 
-    body = []
+    # v2:逐天的分类点位计数(8 类全部展示,0 的半透明) + 当日总量(用于 rail vol 条相对最大值)
+    max_day_n = max((len(its) for _, its in sections), default=1) or 1
+    day_info = []  # [(day, its, cat_counts, vol_pct)]
     for day, its in sections:
+        cc = {c: 0 for c in _CAT_ORDER}
+        for it in its:
+            c = it.get("category", "")
+            if c in cc:
+                cc[c] += 1
+        vol = int(len(its) / max_day_n * 100) if max_day_n else 0
+        day_info.append((day, its, cc, vol))
+
+    def _day_cats_html(cc):
+        parts = []
+        for cat in _CAT_ORDER:
+            n = cc.get(cat, 0)
+            cls = f"dc {_cat_class(cat)}" + (" zero" if n == 0 else "")
+            parts.append(f'<span class="{cls}"><span class="dot"></span>{_e(cat)} <span class="n">{n}</span></span>')
+        return "".join(parts)
+
+    body = []
+    for day, its, cc, vol in day_info:
         rows = "\n".join(_card(it, interactions.get(it.get("source_id"), "detail")) for it in its)
         md = _fmt_md(day).replace("-", " / ")
-        body.append(f'<section class="day"><div class="day-label"><span class="d">{_e(md)}</span>'
+        body.append(f'<section class="day" id="d-{_e(day)}">'
+                    f'<div class="day-label">'
+                    f'<div class="day-label-row"><span class="d">{_e(md)}</span>'
                     f'<span class="w">{_weekday(day)}</span><span class="rule"></span>'
-                    f'<span class="n">{len(its)} 条</span></div>\n{rows}\n</section>')
+                    f'<span class="n">{len(its)} 条</span></div>'
+                    f'<div class="day-cats">{_day_cats_html(cc)}</div>'
+                    f'</div>\n{rows}\n</section>')
     body_html = "\n".join(body) if body else ""
+
+    # v2:左侧迷你日期游标(最多 14 天)
+    rail_items = []
+    for day, its, _cc, vol in day_info[:14]:
+        md = _fmt_md(day).replace("-", " / ")
+        rail_items.append(
+            f'<a href="#d-{_e(day)}" class="rail-day" data-day="{_e(day)}">'
+            f'<span><span class="d">{_e(md)}</span><span class="w">{_weekday(day)}</span></span>'
+            f'<span class="vol"><span style="width:{max(6, vol)}%"></span></span></a>')
+    if rail_items:
+        # 首项默认 on
+        rail_items[0] = rail_items[0].replace('class="rail-day"', 'class="rail-day on"', 1)
+    rail_html = '<aside class="rail" id="rail"><div class="rail-k">Timeline</div>' + "".join(rail_items) + '</aside>' if rail_items else ""
 
     pills = ['<span class="pill on" data-cat="">全部</span>']
     for cat in [c for c in _CAT_ORDER if c != "推文"]:
@@ -714,11 +1042,12 @@ def _render_feed(items, interactions, out):
 
     page = (_head("AI Radar — 时间流", _FEED_CSS, maxw="760px")
             + "\n<body>\n" + _top_header("feed", search_ph="搜索内容(中英)…")
-            + '\n<main class="wrap"><div class="feed-head"><a href="/" class="back">← 总览</a>'
+            + '\n<div class="shell">' + rail_html
+            + '<main class="wrap"><div class="feed-head"><a href="/" class="back">← 总览</a>'
             + '<h1 id="feed-title">时间流</h1><div class="sub" id="feed-sub">全部来源 · 按时间倒序 · 不含推文</div>'
             + f'<div class="pills" id="pills">{pills_html}</div></div>\n'
             + body_html
-            + '\n<p class="empty" id="empty">该分类暂无内容。</p>\n</main>\n'
+            + '\n<p class="empty" id="empty">该分类暂无内容。</p>\n</main>\n</div>\n'
             + f'<script>{_THEME_JS}{_FEED_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
     (out / "feed.html").write_text(page, encoding="utf-8")
 
@@ -755,9 +1084,11 @@ def _render_reads(items, interactions, out):
     for day, its in sections:
         rows = "\n".join(_card(it, interactions.get(it.get("source_id"), "detail"), anchor(it)) for it in its)
         md = _fmt_md(day).replace("-", " / ")
-        body.append(f'<section class="day"><div class="day-label"><span class="d">{_e(md)}</span>'
+        body.append(f'<section class="day"><div class="day-label">'
+                    f'<div class="day-label-row"><span class="d">{_e(md)}</span>'
                     f'<span class="w">{_weekday(day)}</span><span class="rule"></span>'
-                    f'<span class="n">{len(its)} 条</span></div>\n{rows}\n</section>')
+                    f'<span class="n">{len(its)} 条</span></div>'
+                    f'</div>\n{rows}\n</section>')
     body_html = "\n".join(body) if body else '<p class="empty">还没有精读内容——挑中的文章补全文翻译、视频补总结后会出现在这里。</p>'
 
     page = (_head("AI Radar — 精读", _FEED_CSS, maxw="760px")
@@ -793,25 +1124,35 @@ def _bili_bv(url):
     return m.group(1) if m else ""
 
 
-def _facade(cover, src, badge, data_attr, hint="点击播放"):
-    """通用 lite 门面：封面 + 播放钮 + 角标;点击才由 _DETAIL_JS 挂 iframe（data-yt / data-bv）。"""
+def _facade(cover, src, badge, data_attr, hint="点击播放", duration="", published=""):
+    """通用 lite 门面：封面 + 播放钮 + 角标(badge 顶左 hint 顶右 时长右下);点击才由 _DETAIL_JS 挂 iframe。
+    duration/published 留空则不渲染对应角标(诚实空态,不造假)。"""
+    dur_html = f'<span class="dur">{_e(duration)}</span>' if duration else ""
+    pub_html = f'<span class="pub">{_e(published)}</span>' if published else ""
     return (f'<div class="facade" {data_attr}>'
             f'<img class="thumb" src="{cover}" alt="" loading="lazy">'
             f'<div class="hint">{hint}</div>'
+            f'{pub_html}{dur_html}'
             f'<div class="play"><span class="pbtn">{_PLAY_SVG}</span></div>'
             f'<div class="ov"><span class="dotmark">{_e(_monogram(src))}</span>'
             f'<div><div class="nm">{_e(src)}</div><div class="sub2">{badge}</div></div></div></div>')
 
 
-def _youtube_embed(url, src=""):
-    """YouTube 门面;点击才挂 iframe（无注入）。无 vid → ""。"""
+def _youtube_embed(url, src="", item=None):
+    """YouTube 门面;点击才挂 iframe（无注入）。无 vid → ""。
+    item 给到则尝试取 published_at 显示。时长目前 ai-radar 没抓→不显示(诚实空态)。"""
     vid = _yt_id(url)
     if not vid:
         return ""
-    return _facade(f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", src, "YouTube", f'data-yt="{vid}"')
+    pub = ""
+    if item:
+        dt = _effective_dt(item)
+        if dt and dt != _MIN_DT:
+            pub = dt.strftime("%Y-%m-%d")
+    return _facade(f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", src, "YouTube", f'data-yt="{vid}"', published=pub)
 
 
-def _bili_embed(bili_url, yt_url, src=""):
+def _bili_embed(bili_url, yt_url, src="", item=None):
     """B站门面(中文翻译搬运):用 YouTube 同片封面 + 哔哩哔哩角标;点击挂 player.bilibili.com。无 BV → ""。"""
     bv = _bili_bv(bili_url)
     if not bv:
@@ -820,29 +1161,118 @@ def _bili_embed(bili_url, yt_url, src=""):
     cover = f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
     cid = re.search(r"cid=(\d+)", bili_url or "")  # set_bili.py 取自 B站 API,有则更可靠加载
     data = f'data-bv="{bv}"' + (f' data-cid="{cid.group(1)}"' if cid else "")
-    return _facade(cover, src, "哔哩哔哩 · 中文翻译", data, hint="中文翻译 · 点击播放")
+    pub = ""
+    if item:
+        dt = _effective_dt(item)
+        if dt and dt != _MIN_DT:
+            pub = dt.strftime("%Y-%m-%d") + " 搬运"
+    return _facade(cover, src, "哔哩哔哩 · 中文翻译", data, hint="中文翻译 · 点击播放", published=pub)
+
+
+# v2:文章正文 h2/h3 注入 id 并抽出 outline(供右浮目录使用)。
+_H_TAG_RE = re.compile(r'<h([23])([^>]*)>(.+?)</h\1>', re.S)
+
+
+def _inject_outline_ids(html_str, outline, seen, kept_max=18):
+    """对 html_str 里所有 h2/h3:已有 id 跳过、否则按 inner text 生成 slug(去重)并注入。
+    同时把前 kept_max 条收入 outline(list of (lvl, slug, text))。"""
+    def slug_of(text):
+        s = re.sub(r'[^\w一-龥]+', '-', text).strip('-')[:40]
+        return s or f"h{len(outline) + 1}"
+
+    def repl(m):
+        lvl = int(m.group(1)); attrs = m.group(2) or ""; inner = m.group(3)
+        text = re.sub(r'<[^>]+>', '', inner).strip()
+        if not text:
+            return m.group(0)
+        if 'id=' in attrs:
+            return m.group(0)
+        sl = slug_of(text); base = sl; i = 0
+        while sl in seen:
+            i += 1; sl = f"{base}-{i}"
+        seen.add(sl)
+        if len(outline) < kept_max:
+            outline.append((lvl, sl, text))
+        return f'<h{lvl} id="{sl}"{attrs}>{inner}</h{lvl}>'
+
+    return _H_TAG_RE.sub(repl, html_str)
 
 
 def _tabs(item):
-    """文章态 tabs：原文（content_html 原样，不改写）/ 中文翻译（translation_md 有则渲染全文，无则诚实空态）。"""
+    """文章态 tabs：原文（content_html）/ 中文翻译（translation_md 有则渲染全文，无则诚实空态）。
+    返回 (tabs_html, outline)。outline 优先取译文,无则取原文,从而 outline 内容与默认打开的 tab 一致。"""
     content = _lazy_imgs(item.get("content_html") or "")
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
     tmd = (item.get("translation_md") or "").strip()
     if tmd:
-        zh, zh_cls = _lazy_imgs(md_to_html(tmd)), "panel doc"  # 人工挑选条目的全文译文
+        zh, zh_cls = _lazy_imgs(md_to_html(tmd)), "panel doc"
     else:
         zh, zh_cls = _tr_empty("文章"), "panel"
-    return ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button>'
-            '<button class="tab" data-panel="p-zh">中文翻译</button></div>'
-            f'<section class="panel on doc" id="p-orig">{yuanwen}</section>'
-            f'<section class="{zh_cls}" id="p-zh">{zh}</section>')
+    outline, seen = [], set()
+    # 先注 zh 再注原文:译文若有就当主大纲(显示给用户)
+    if tmd:
+        zh = _inject_outline_ids(zh, outline, seen)
+    yuanwen = _inject_outline_ids(yuanwen, outline if not tmd else [], seen if not tmd else set())
+    tabs_html = ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button>'
+                 '<button class="tab" data-panel="p-zh">中文翻译</button></div>'
+                 f'<section class="panel on doc" id="p-orig">{yuanwen}</section>'
+                 f'<section class="{zh_cls}" id="p-zh">{zh}</section>')
+    return tabs_html, outline
 
 
-def _detail_header(src, cat_cls):
+def _outline_html(outline):
+    """outline list[(lvl,slug,text)] → 右浮目录 HTML。空时返回 ""。"""
+    if not outline:
+        return ""
+    parts = []
+    for lvl, slug, text in outline:
+        cls = "h3" if lvl == 3 else "h2"
+        parts.append(f'<li class="{cls}"><a href="#{slug}">{_e(text)}</a></li>')
+    return ('<aside class="outline" id="outline"><div class="outline-k">Contents</div>'
+            '<ol>' + "".join(parts) + '</ol></aside>')
+
+
+# v2:视频总结 markdown 里 '## NN:NN 标题' / '## NN:NN:NN 标题' 形式 → 抽 chapters,改写 h2 加 id 和 ts
+_H2_TS = re.compile(r'<h2[^>]*>\s*((?:\d{1,2}:)?\d{1,2}:\d{2})\s+([^<]+?)\s*</h2>')
+
+
+def _extract_chapters(html_str):
+    """返回 (改写后 html, chapters list)。无时间戳的 h2 原样保留。"""
+    chapters = []
+
+    def repl(m):
+        ts, ttl = m.group(1), m.group(2).strip()
+        sl = re.sub(r'[^\w一-龥]+', '-', ttl).strip('-')[:40] or f"c{len(chapters) + 1}"
+        chapters.append({"ts": ts, "title": ttl, "slug": sl})
+        return f'<h2 id="{sl}"><span class="ts">{ts}</span>{ttl}</h2>'
+
+    return _H2_TS.sub(repl, html_str), chapters
+
+
+def _chapters_html(chapters):
+    if not chapters:
+        return ""
+    parts = []
+    for c in chapters:
+        parts.append(f'<a class="chap" href="#{c["slug"]}" data-anchor="{c["slug"]}">'
+                     f'<span class="ts">{_e(c["ts"])}</span>'
+                     f'<span class="ttl">{_e(c["title"])}</span></a>')
+    parts[0] = parts[0].replace('class="chap"', 'class="chap on"', 1)
+    return '<div class="chapters">' + "".join(parts) + '</div>'
+
+
+def _detail_header(src, cat_cls, with_reader=False):
+    """with_reader=True 时(仅文章态)在主题切换前插入阅读偏好工具条:字号 -/+/宽窄/sepia。"""
+    reader = ('<div class="reader" role="toolbar" aria-label="阅读偏好">'
+              '<button id="font-down" title="缩小字号">A−</button>'
+              '<button id="font-up" title="放大字号">A+</button>'
+              '<button id="width-toggle" class="opt" data-on="0" title="切宽窄读">⇆</button>'
+              '<button id="sepia" class="opt" data-on="0" title="柔光阅读底">◐</button>'
+              '</div>') if with_reader else ""
     return (f'<header class="top"><div class="top-in">'
             f'<a id="back" href="{_e(_feed_href(src))}" class="back {cat_cls}">'
             f'{_avatar(src, "av")}<span>← {_e(src) or "AI Radar"}</span></a>'
-            f'<div class="top-right"><button class="icon-btn" id="theme" aria-label="切换深浅色">{_SUNMOON_SVG}</button></div>'
+            f'<div class="top-right">{reader}<button class="icon-btn" id="theme" aria-label="切换深浅色">{_SUNMOON_SVG}</button></div>'
             f'</div></header>')
 
 
@@ -866,30 +1296,30 @@ def _render_detail(item, out, descriptions):
         # ---- 视频态:英文(YouTube 原片)/ 中文(B站翻译搬运)双 tab ----
         subtitle = title if (title_zh and title and title_zh != title) else ""
         sub_html = f'<p class="subtitle" style="font-style:normal;font-size:14.5px;color:var(--muted)">{_e(subtitle)}</p>' if subtitle else ""
-        # 英文 tab:YouTube 门面(点击站内播放)+ 英文简介
         desc_en = item.get("summary") or ""
         desc_html = (f'<p style="font-family:var(--serif);font-size:16px;line-height:1.7;color:var(--fg-2);margin-top:18px">{_e(desc_en)}</p>'
                      if desc_en else "")
-        en_panel = _youtube_embed(raw_url, src) + desc_html
-        # 中文 tab:已翻译搬运到 B站(video_url)→ 可站内播放的 B站门面;否则诚实空态
-        bili = _bili_embed(item.get("video_url", ""), raw_url, src)
+        en_panel = _youtube_embed(raw_url, src, item) + desc_html
+        bili = _bili_embed(item.get("video_url", ""), raw_url, src, item)
         if bili:
             zh_panel = (bili + '<p style="margin-top:14px;font-size:13px;color:var(--muted)">本视频已翻译并搬运至 '
                         f'<a href="{_safe_url(item.get("video_url",""))}" target="_blank" rel="noopener" '
                         'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点封面在站内播放中文翻译版。</p>')
         else:
             zh_panel = _tr_empty("视频")
-        # 总结 tab:人工上传的视频内容中文总结(markdown,set_summary.py)。有则渲染并默认打开,无则空态。
+        # v2:总结 tab 抽时间戳章节(`## NN:NN 标题`形式),无时间戳时正常渲染
         summ_md = (item.get("summary_md") or "").strip()
         if summ_md:
-            sum_panel = _lazy_imgs(md_to_html(summ_md))
+            sum_raw = _lazy_imgs(md_to_html(summ_md))
+            sum_body, chapters = _extract_chapters(sum_raw)
+            sum_panel = _chapters_html(chapters) + sum_body
         else:
             sum_panel = ('<div class="tr-empty"><div class="ico">' + _TR_SVG + '</div>'
                          '<h3>这条视频还没有内容总结</h3>'
                          '<p>挑中的视频可上传一篇中文总结(看完视频提炼要点),在此 tab 阅读。</p>'
                          '<p class="why">上传:src/set_summary.py &lt;hash&gt; &lt;总结.md&gt;</p></div>')
         has_sum = bool(summ_md)
-        on_sum, on_en = (" on", "") if has_sum else ("", " on")  # 有总结默认开总结 tab,否则开英文
+        on_sum, on_en = (" on", "") if has_sum else ("", " on")
         body = (f'<main class="wrap {cat_cls}">'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
                 f'<div class="actions">'
@@ -902,22 +1332,27 @@ def _render_detail(item, out, descriptions):
                 f'<section class="panel" id="p-zh">{zh_panel}</section>'
                 f'<section class="panel{on_sum} doc" id="p-sum">{sum_panel}</section></main>')
         progress = ""
+        header_html = _detail_header(src, cat_cls, with_reader=False)
     else:
-        # ---- 文章态 ----
+        # ---- 文章态:正文抽 outline,wrap 外面包 .shell-doc 双列(正文 + 右浮目录) ----
         subtitle = title if (title_zh and title and title_zh != title) else ""
         sub_html = f'<p class="subtitle">{_e(subtitle)}</p>' if subtitle else ""
         rt = _read_time(item.get("content_html", ""))
         rt_html = f'<span class="read-time">{rt}</span>' if rt else ""
-        body = (f'<main class="wrap {cat_cls}">'
+        tabs_html, outline = _tabs(item)
+        outline_html = _outline_html(outline)
+        wrap = (f'<main class="wrap {cat_cls}">'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
                 f'<div class="actions">'
                 f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}打开原文</a>'
                 f'<button class="btn" id="copy" data-url="{_e(raw_url)}">{_COPY_SVG}<span>复制链接</span></button>{rt_html}</div>'
-                f'{_tabs(item)}</main>')
+                f'{tabs_html}</main>')
+        body = f'<div class="shell-doc">{wrap}{outline_html}</div>'
         progress = '<div class="progress" id="progress"></div>'
+        header_html = _detail_header(src, cat_cls, with_reader=True)
 
     page = (_head(head_title + " · AI Radar", _DETAIL_CSS, maxw="680px" if not is_video else "760px")
-            + "\n<body>\n" + progress + "\n" + _detail_header(src, cat_cls) + "\n" + body
+            + "\n<body>\n" + progress + "\n" + header_html + "\n" + body
             + f'\n<script>{_THEME_JS}{_DETAIL_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 

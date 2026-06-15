@@ -306,6 +306,23 @@ class TestRender(unittest.TestCase):
         self.assertIn('target="_blank"', card)
         self.assertNotIn("/item/", card)
 
+    def test_card_tweet_avatar_name_quote(self):
+        import json as _json
+        item = {"hash": "tw1", "category": "推文", "source_label": "X · 关注",
+                "title": "@blackanger：基于决策阶梯，给 AI 一段 prompt", "title_zh": "",
+                "tweet_meta": _json.dumps({"name": "AlexZ", "handle": "blackanger", "avatar": "/img/av.jpg",
+                                           "verified": True, "rt": "",
+                                           "quote": {"name": "Tech with Mak", "handle": "techNmak",
+                                                     "text": "A dev got so frustrated"}}, ensure_ascii=False)}
+        card = render._card(item, "link")
+        self.assertIn('src="/img/av.jpg"', card)        # 真头像
+        self.assertIn("AlexZ", card)                     # 作者名
+        self.assertIn("tw-vf", card)                     # 认证徽章
+        self.assertIn('it-title">基于决策阶梯', card)    # 正文(it-title)已去 "@handle：" 前缀,直接从文本开头
+        self.assertNotIn('it-title">@blackanger', card)  # 正文不再以 @handle 开头(data-text 搜索域仍保留原文)
+        self.assertIn("Tech with Mak", card)             # 引用作者
+        self.assertIn("A dev got so frustrated", card)   # 引用文本
+
     def test_card_search_blob_has_english_and_chinese(self):
         # 显示中文标题,但搜索域 data-text 须中英都含——否则英文关键词搜不到
         card = render._card({"hash": "h", "category": "资讯", "source_label": "S",

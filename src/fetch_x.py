@@ -112,9 +112,10 @@ def to_item(t):
     text = _tweet_text(t)  # 清洗:删末尾媒体/引用 t.co,展开/保留其余链接(不丢作者分享的链)
     if not handle or not tid:
         return None
+    rb = ""
     if t.get("isRetweet"):
-        rb = t.get("retweetedBy")
-        rb = rb if isinstance(rb, str) else (rb.get("screenName", "") if isinstance(rb, dict) else "")
+        rbv = t.get("retweetedBy")
+        rb = rbv if isinstance(rbv, str) else (rbv.get("screenName", "") if isinstance(rbv, dict) else "")
         prefix = f"@{rb} 🔁 @{handle}" if rb else f"@{handle}"
     else:
         prefix = f"@{handle}"
@@ -122,12 +123,24 @@ def to_item(t):
     photos = [m.get("url", "") for m in (t.get("media") or [])
               if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
     imgs = "".join(f'<img src="{u}">' for u in photos[:4])
+    # tweet_meta:作者头像(进站)+ 名称/认证 + 转发者 + 被引用推(quotedTweet),供卡片还原推特视觉
+    av = content._download_image(a.get("profileImageUrl")) if isinstance(a, dict) and a.get("profileImageUrl") else None
+    q = t.get("quotedTweet")
+    quote = None
+    if isinstance(q, dict) and (q.get("text") or (q.get("author") or {}).get("screenName")):
+        qa = q.get("author") or {}
+        quote = {"name": (qa.get("name") or "").strip(), "handle": qa.get("screenName", ""),
+                 "text": re.sub(r"\s+", " ", _TCO.sub("", html.unescape(q.get("text", "") or ""))).strip()[:260]}
+    meta = {"name": (a.get("name") or "").strip() if isinstance(a, dict) else "", "handle": handle,
+            "avatar": av or "", "verified": bool(isinstance(a, dict) and a.get("verified")),
+            "rt": rb, "quote": quote}
     return {
         "title": (f"{prefix}：{text}" if text else prefix)[:500],  # 推文全文,时间流标题行不 clamp 完整展示
         "url": f"https://x.com/{handle}/status/{tid}",
         "summary": "",
         "published_at": t.get("createdAtISO") or t.get("createdAt") or "",
         "content_html": content.process(imgs) if imgs else "",
+        "tweet_meta": json.dumps(meta, ensure_ascii=False),
     }
 
 
