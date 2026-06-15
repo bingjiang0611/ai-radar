@@ -137,7 +137,10 @@ img{max-width:100%}
 .lightbox{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;
   cursor:zoom-out;background:oklch(12% 0.02 262 / .9);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .lightbox img{max-width:92vw;max-height:92vh;border-radius:10px;box-shadow:0 20px 60px -10px oklch(0% 0 0 / .6)}
-@media(max-width:560px){.top-in{padding:10px 16px;gap:10px}.brand span{display:none}}
+@media(max-width:560px){.top-in{padding:9px 13px;gap:9px}.brand span{display:none}
+  .stat{display:none}.nav{margin-left:2px;gap:2px}.nav a{font-size:13px;padding:5px 8px}
+  .top-right{flex:1;min-width:0;margin-left:6px;justify-content:flex-end}
+  .search{flex:1;min-width:56px;max-width:240px}.search input{width:100%}}
 """
 
 _HOME_CSS = """
@@ -183,8 +186,8 @@ _HOME_CSS = """
 .sc-foot .n{color:var(--fg-2);background:var(--inset);padding:2px 7px;border-radius:6px}
 .sc-foot .b{color:var(--muted);border:1px solid var(--border-2);padding:1px 6px;border-radius:6px;letter-spacing:.04em}
 @media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.front{grid-template-columns:1fr}
-  .lead{border-right:0;border-bottom:1px solid var(--border);min-height:0}.lead h3{font-size:27px}.stat,.nav{display:none}}
-@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}.search input{width:150px}}
+  .lead{border-right:0;border-bottom:1px solid var(--border);min-height:0}.lead h3{font-size:27px}}
+@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}}
 """
 
 _FEED_CSS = """
@@ -233,7 +236,7 @@ _FEED_CSS = """
 .it-media img{max-height:200px;max-width:100%;border-radius:10px;border:1px solid var(--border);object-fit:cover}
 .play{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:var(--cat)}
 .play svg{width:14px;height:14px}
-@media(max-width:560px){.wrap{padding:20px 16px 48px}.nav{display:none}.search input{width:130px}
+@media(max-width:560px){.wrap{padding:20px 16px 48px}
   .feed-head h1{font-size:25px}.it-meta .time{margin-left:0}.day-label{top:52px}}
 """
 
