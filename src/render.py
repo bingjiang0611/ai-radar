@@ -398,13 +398,34 @@ _LIGHTBOX_JS = """
 """
 
 
-_IMG_NO_LAZY = re.compile(r'(?i)<img(?![^>]*\bloading=)')
+_IMG_TAG = re.compile(r"(?i)<img[^>]*>")
+_IMG_LOCAL = re.compile(r'src="/img/([^"]+)"')
+_img_have_cache = [None]
+
+
+def _img_have():
+    """dist/img 现存文件名集合(每次渲染进程缓存一次)。"""
+    if _img_have_cache[0] is None:
+        from content import DIST_IMG
+        _img_have_cache[0] = {p.name for p in DIST_IMG.iterdir()} if DIST_IMG.exists() else set()
+    return _img_have_cache[0]
 
 
 def _lazy_imgs(html_str):
-    """给正文/推文配图的 <img> 补 loading="lazy"——默认时间流隐藏的推文图(及详情页正文图)
-    不滚动到视口就不下载,省掉首屏不需要的图片字节。"""
-    return _IMG_NO_LAZY.sub('<img loading="lazy"', html_str or "")
+    """给正文/推文配图的 <img> 补 loading="lazy"(隐藏/未滚到视口不下载);
+    并**丢弃 /img 文件已不在站的 <img>**——避免破图图标(图若丢失则优雅地不显示,而非裂图)。"""
+    if not html_str:
+        return html_str
+    have = _img_have()
+
+    def repl(m):
+        tag = m.group(0)
+        loc = _IMG_LOCAL.search(tag)
+        if loc and loc.group(1) not in have:
+            return ""  # 站内图文件缺失 → 不渲染该 <img>(无破图)
+        return tag if "loading=" in tag else tag.replace("<img", '<img loading="lazy"', 1)
+
+    return _IMG_TAG.sub(repl, html_str)
 
 
 def _e(s):
@@ -850,6 +871,7 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
     interactions = interactions or {}
     descriptions = descriptions or {}
     _ICONS = icons or {}
+    _img_have_cache[0] = None  # 每次渲染重读 dist/img(丢图防御按当前文件状态判定)
     out = Path(out_dir) if out_dir else DIST
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)

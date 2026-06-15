@@ -302,10 +302,19 @@ class TestRender(unittest.TestCase):
         self.assertIn("english original title", m.group(1))   # 英文原标题在搜索域
         self.assertIn("中文标题", m.group(1))                  # 中译也在
 
-    def test_lazy_imgs_adds_loading(self):
-        out = render._lazy_imgs('<p><img src="/img/a.png"> and <img loading="lazy" src="/img/b.png"></p>')
-        self.assertEqual(out.count('loading="lazy"'), 2)   # 补缺失的、不重复加已有的
-        self.assertIn('<img loading="lazy" src="/img/a.png"', out)
+    def test_lazy_imgs_adds_loading_and_drops_missing(self):
+        import content
+        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
+        (content.DIST_IMG / "lz-a.png").write_bytes(b"x")   # a 存在 → 保留+lazy
+        render._img_have_cache[0] = None                    # 清渲染缓存,让其重读
+        try:
+            out = render._lazy_imgs('<p><img src="/img/lz-a.png"> <img src="/img/lz-gone.png"></p>')
+            self.assertIn('<img loading="lazy" src="/img/lz-a.png"', out)  # 存在的:加 lazy
+            self.assertNotIn("lz-gone.png", out)             # 文件缺失的:整个 <img> 丢掉(无破图)
+            self.assertEqual(out.count("<img"), 1)
+        finally:
+            (content.DIST_IMG / "lz-a.png").unlink(missing_ok=True)
+            render._img_have_cache[0] = None
 
     def test_tabs_no_rewrite(self):
         panel = render._tabs({"content_html": "<p>x</p>"})
