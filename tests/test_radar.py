@@ -319,7 +319,8 @@ class TestRender(unittest.TestCase):
     def test_has_zh_deep_and_card_anchor(self):
         self.assertTrue(render._has_zh_deep({"translation_md": "译文"}))
         self.assertTrue(render._has_zh_deep({"summary_md": "总结"}))
-        self.assertFalse(render._has_zh_deep({"translation_md": "", "summary_md": ""}))
+        self.assertTrue(render._has_zh_deep({"video_url": "https://www.bilibili.com/video/BV1x"}))  # B站译制
+        self.assertFalse(render._has_zh_deep({"translation_md": "", "summary_md": "", "video_url": ""}))
         self.assertFalse(render._has_zh_deep({}))
         # anchor 拼进详情 href(精读页深链直接开对应 tab)
         card = render._card({"hash": "h9", "category": "资讯", "source_label": "S",

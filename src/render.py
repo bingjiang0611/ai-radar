@@ -721,8 +721,10 @@ def _render_feed(items, interactions, out):
 
 
 def _has_zh_deep(item):
-    """有人工中文深读内容:全文翻译(translation_md)或视频总结(summary_md)。"""
-    return bool((item.get("translation_md") or "").strip() or (item.get("summary_md") or "").strip())
+    """有人工中文深读内容:全文翻译(translation_md)/ 视频总结(summary_md)/ B站译制版(video_url 含 bilibili)。"""
+    return bool((item.get("translation_md") or "").strip()
+                or (item.get("summary_md") or "").strip()
+                or "bilibili" in (item.get("video_url") or ""))
 
 
 def _render_reads(items, interactions, out):
