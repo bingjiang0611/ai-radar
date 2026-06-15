@@ -282,6 +282,15 @@ class TestRender(unittest.TestCase):
         self.assertIn('target="_blank"', card)
         self.assertNotIn("/item/", card)
 
+    def test_card_search_blob_has_english_and_chinese(self):
+        # 显示中文标题,但搜索域 data-text 须中英都含——否则英文关键词搜不到
+        card = render._card({"hash": "h", "category": "资讯", "source_label": "S",
+                             "title": "English Original Title", "title_zh": "中文标题",
+                             "summary": "english summary text", "summary_zh": "中文摘要"})
+        m = re.search(r'data-text="([^"]*)"', card)
+        self.assertIn("english original title", m.group(1))   # 英文原标题在搜索域
+        self.assertIn("中文标题", m.group(1))                  # 中译也在
+
     def test_lazy_imgs_adds_loading(self):
         out = render._lazy_imgs('<p><img src="/img/a.png"> and <img loading="lazy" src="/img/b.png"></p>')
         self.assertEqual(out.count('loading="lazy"'), 2)   # 补缺失的、不重复加已有的

@@ -201,13 +201,15 @@ _FEED_CSS = """
 .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--cat,var(--faint))}
 .pill.on{color:var(--surface);background:var(--fg);border-color:var(--fg)}
 .pill.on .dot{background:var(--surface)}
-.day{margin-top:8px}
-.day-label{position:sticky;top:54px;z-index:5;display:flex;align-items:center;gap:10px;padding:14px 0 8px;
-  background:linear-gradient(var(--bg) 70%,transparent)}
-.day-label .d{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--fg-2)}
-.day-label .w{font-family:var(--mono);font-size:11px;color:var(--faint)}
-.day-label .rule{flex:1;height:1px;background:var(--border)}
-.day-label .n{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.day{margin-top:34px}
+.day:first-of-type{margin-top:8px}
+.day-label{position:sticky;top:50px;z-index:5;display:flex;align-items:center;gap:11px;padding:10px 0;margin-bottom:8px;
+  background:var(--bg);border-bottom:1px solid var(--border-2)}
+.day-label::before{content:"";width:4px;height:20px;border-radius:2px;background:var(--accent-2)}
+.day-label .d{font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:.04em;color:var(--fg)}
+.day-label .w{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--muted)}
+.day-label .rule{flex:1}
+.day-label .n{font-family:var(--mono);font-size:11px;color:var(--faint);background:var(--inset);padding:2px 8px;border-radius:999px}
 .item{display:flex;gap:13px;padding:15px 12px;margin:0 -12px;border-radius:10px;transition:background .14s}
 .item+.item{border-top:1px solid var(--border)}
 .item:hover{background:var(--surface-2)}
@@ -634,7 +636,8 @@ def _card(item, mode="detail"):
                 f'<span class="tag"><span class="dot"></span>{_e(cat)}</span>'
                 f'<span class="time">{_e(_fmt_time(item))}</span></div>'
                 f'<div class="it-title">{_e(trans)}{tw_ext}</div>{orig_html}{media_html}</div></a>')
-    blob = _e(f"{title} {summ} {src}".lower())
+    # 搜索域:中英都进(title_zh 中译 + title 英文原 + 两版摘要),这样英文关键词也能搜到
+    blob = _e(f"{item.get('title','')} {item.get('title_zh','')} {item.get('summary','')} {item.get('summary_zh','')} {src}".lower())
     play = f'<span class="play">{_PLAY_SVG}</span>' if cat == "视频" else ""
     ext = '<span class="ext">↗</span>' if is_ext else ""
     summ_html = f'<div class="it-sum">{_e(summ)}</div>' if summ else ""
@@ -792,15 +795,28 @@ def _render_detail(item, out, descriptions):
                         'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点封面在站内播放中文翻译版。</p>')
         else:
             zh_panel = _tr_empty("视频")
+        # 总结 tab:人工上传的视频内容中文总结(markdown,set_summary.py)。有则渲染并默认打开,无则空态。
+        summ_md = (item.get("summary_md") or "").strip()
+        if summ_md:
+            sum_panel = _lazy_imgs(md_to_html(summ_md))
+        else:
+            sum_panel = ('<div class="tr-empty"><div class="ico">' + _TR_SVG + '</div>'
+                         '<h3>这条视频还没有内容总结</h3>'
+                         '<p>挑中的视频可上传一篇中文总结(看完视频提炼要点),在此 tab 阅读。</p>'
+                         '<p class="why">上传:src/set_summary.py &lt;hash&gt; &lt;总结.md&gt;</p></div>')
+        has_sum = bool(summ_md)
+        on_sum, on_en = (" on", "") if has_sum else ("", " on")  # 有总结默认开总结 tab,否则开英文
         body = (f'<main class="wrap {cat_cls}">'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
                 f'<div class="actions">'
                 f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}在 YouTube 打开</a>'
                 f'<button class="btn" id="copy" data-url="{_e(raw_url)}">{_COPY_SVG}<span>复制链接</span></button></div>'
-                f'<div class="tabs"><button class="tab on" data-panel="p-en">英文</button>'
-                f'<button class="tab" data-panel="p-zh">中文</button></div>'
-                f'<section class="panel on" id="p-en">{en_panel}</section>'
-                f'<section class="panel" id="p-zh">{zh_panel}</section></main>')
+                f'<div class="tabs"><button class="tab{on_en}" data-panel="p-en">英文</button>'
+                f'<button class="tab" data-panel="p-zh">中文</button>'
+                f'<button class="tab{on_sum}" data-panel="p-sum">总结</button></div>'
+                f'<section class="panel{on_en}" id="p-en">{en_panel}</section>'
+                f'<section class="panel" id="p-zh">{zh_panel}</section>'
+                f'<section class="panel{on_sum} doc" id="p-sum">{sum_panel}</section></main>')
         progress = ""
     else:
         # ---- 文章态 ----

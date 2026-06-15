@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS items (
   status        TEXT DEFAULT 'new',
   content_html  TEXT DEFAULT '',
   translation_md TEXT DEFAULT '',
-  video_url     TEXT DEFAULT ''
+  video_url     TEXT DEFAULT '',
+  summary_md    TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
 CREATE INDEX IF NOT EXISTS idx_items_fetched  ON items(fetched_at);
@@ -47,6 +48,11 @@ def _conn():
 def init_db(conn=None):
     c = conn or _conn()
     c.executescript(SCHEMA)
+    for col in ("summary_md",):  # 给已存在的旧库补列(CREATE TABLE IF NOT EXISTS 不会加列)
+        try:
+            c.execute(f"ALTER TABLE items ADD COLUMN {col} TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
     c.commit()
     if conn is None:
         c.close()

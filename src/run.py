@@ -118,7 +118,10 @@ def main():
 
     purged = purge_old(RETENTION_DAYS)
     items = all_items()
-    removed_imgs = content.gc_images([i["content_html"] for i in items])
+    # gc 要扫所有可能引用 /img/ 的字段:正文 + 译文 + 总结(否则会误删译文/总结里的进站图)
+    removed_imgs = content.gc_images([i["content_html"] for i in items]
+                                     + [i.get("translation_md", "") for i in items]
+                                     + [i.get("summary_md", "") for i in items])
     if purged or removed_imgs:
         print(f"🧹 retention：清掉 {purged} 条过期条目、{removed_imgs} 张无引用图片")
 
