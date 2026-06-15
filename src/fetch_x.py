@@ -25,12 +25,25 @@ from store import insert_items, url_hash, hash_exists   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
-_TCO = re.compile(r"https?://t\.co/\S+")  # 推文末尾的媒体/引用短链——展示时去掉(噪音)
+_TCO = re.compile(r"https?://t\.co/\S+")
 
 
-def _clean_text(text):
-    # Twitter API 文本是 HTML 转义的(&gt;/&amp;/&#8217;)→ 先 unescape 再去 t.co,否则页面显示字面实体
-    return _TCO.sub("", html.unescape(text or "").replace("\n", " ")).strip()
+def _tweet_text(t):
+    """推文正文清洗。Twitter 把所有链接缩成 t.co。**绝不删 t.co**——media / quotedTweet 都无法可靠区分
+    "作者分享的链接"(如下载地址)与"自动追加的引用/媒体短链"(实测 @oran_ge 既有 media 又有 quotedTweet,
+    但末尾 t.co 是下载链;一刀切删/按 media 删/按 quote 删都会误删)。代价是引用推偶尔残留一个 t.co(可接受),
+    但绝不丢链接。策略:① unescape(API 文本是 HTML 转义的)+ 折行;② t.co 用 `urls`(展开地址,按出现顺序)
+    替换,无展开则保留 t.co(点击仍跳原链)。"""
+    text = html.unescape(t.get("text", "") or "").replace("\n", " ")
+    expanded = [u for u in (t.get("urls") or []) if isinstance(u, str) and u]
+    idx = [0]
+
+    def repl(m):
+        if idx[0] < len(expanded):
+            u = expanded[idx[0]]; idx[0] += 1; return u
+        return m.group(0)  # 没有展开地址 → 保留 t.co(点击仍跳原链)
+
+    return re.sub(r"\s+", " ", _TCO.sub(repl, text)).strip()
 
 
 def is_reply(t):
@@ -96,7 +109,7 @@ def to_item(t):
     a = t.get("author") or {}
     handle = a.get("screenName", "") if isinstance(a, dict) else ""
     tid = str(t.get("id", ""))
-    text = _clean_text(t.get("text", ""))  # 去 t.co 链接 + 折行
+    text = _tweet_text(t)  # 清洗:删末尾媒体/引用 t.co,展开/保留其余链接(不丢作者分享的链)
     if not handle or not tid:
         return None
     if t.get("isRetweet"):

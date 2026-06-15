@@ -144,6 +144,19 @@ class TestSourceFailure(unittest.TestCase):
 
 
 class TestTweetNoise(unittest.TestCase):
+    def test_tweet_text_keeps_links(self):
+        import fetch_x
+        # 作者分享的链接不丢:无展开地址 → 保留 t.co
+        self.assertIn("t.co/nB032", fetch_x._tweet_text({"text": "下载地址：https://t.co/nB032Ad9KF"}))
+        # 有 urls 展开 → 替换成真实地址(按序);媒体/引用即便有也不删链接
+        out = fetch_x._tweet_text({"text": "Github：https://t.co/aaa https://t.co/bbb",
+                                   "urls": ["https://github.com/x/y"], "media": [{"type": "photo"}],
+                                   "quotedTweet": {"id": "1"}})
+        self.assertIn("github.com/x/y", out)   # 第一个 t.co 展开
+        self.assertIn("t.co/bbb", out)         # 没展开的保留(绝不误删)
+        # API 文本是 HTML 转义的 → unescape
+        self.assertIn("5 < 10", fetch_x._tweet_text({"text": "5 &lt; 10"}))
+
     def test_is_noise_filters_giveaway_keeps_real(self):
         import fetch_x
         # 抽奖/转发求互动噪音 → True(即便含 AI 词)
@@ -328,7 +341,7 @@ class TestRender(unittest.TestCase):
         self.assertIn('href="/item/h9.html#zh"', card)
 
     def test_tabs_no_rewrite(self):
-        panel = render._tabs({"content_html": "<p>x</p>"})
+        panel, _outline = render._tabs({"content_html": "<p>x</p>"})  # _tabs 返回 (html, 大纲)
         self.assertNotIn("乔木风格重写", panel)
         self.assertIn("原文", panel)
         self.assertIn("中文翻译", panel)
