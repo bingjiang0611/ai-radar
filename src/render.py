@@ -10,10 +10,12 @@
 8 类色只用于 dot / 类别名 / avatar 渐变，不做满色 pill。主题持久化 localStorage('air-theme')。
 """
 
+import hashlib
 import html
 import json
 import re
 import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -25,6 +27,8 @@ from content import md_to_html  # 译文 translation_md(markdown)→ HTML
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
 
 DIST = Path(__file__).resolve().parent.parent / "dist"
+DIST_THUMB = DIST / "thumb"  # 视频封面本地化目录(与 content 的 dist/img 分开,不被 gc_images 触碰)
+_thumb_cache = {}  # URL → 本地路径(进程内缓存,避免一次渲染重复 stat/下载)
 
 # 分类 → CSS 类（提供 --cat 色）+ 英文副名 + 排序
 _CAT_CLASS = {
@@ -74,23 +78,29 @@ _THEME_PRESET = ("try{var t=localStorage.getItem('air-theme');"
                  "var cv=localStorage.getItem('air-canvas');if(cv==='sepia')document.documentElement.setAttribute('data-canvas','sepia');"
                  "}catch(e){}")
 
-_FONT_LINKS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
-               '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-               '<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;'
-               '6..72,600;6..72,700;6..72,400i;6..72,500i&display=swap" rel="stylesheet">')
+# 不引外部字体：Google Fonts(fonts.googleapis.com)在国内受众网络被墙/503，且是渲染阻塞的跨域请求。
+# 衬线统一走 --serif 的系统回退链(Iowan Old Style / Source Serif 4 / Charter / Georgia / Songti SC)，零外部依赖。
+_FONT_LINKS = ""
+
+# 内联 SVG favicon(data URI，雷达同心圆)：浏览器不再自动请求 /favicon.ico(避免 404)，且不产生网络请求。
+_FAVICON = ('<link rel="icon" href="data:image/svg+xml,'
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' "
+            "stroke='%232b6cb0' stroke-width='2'>"
+            "<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='4.5'/>"
+            "<circle cx='12' cy='12' r='1.4' fill='%232b6cb0' stroke='none'/></svg>\">")
 
 # ---------- 设计系统（基础，全页共用）----------
 _BASE_CSS = """
 :root{
   --bg:oklch(98.6% 0.004 255);--surface:oklch(100% 0 0);--surface-2:oklch(97% 0.005 255);
   --inset:oklch(95.5% 0.006 255);--fg:oklch(24% 0.018 262);--fg-2:oklch(43% 0.016 262);
-  --muted:oklch(55% 0.013 260);--faint:oklch(66% 0.011 260);--border:oklch(91.5% 0.006 262);
+  --muted:oklch(55% 0.013 260);--faint:oklch(53% 0.013 260);--border:oklch(91.5% 0.006 262);
   --border-2:oklch(86% 0.008 262);--accent:oklch(54% 0.16 256);--accent-2:oklch(48% 0.16 256);
   --accent-soft:oklch(95.5% 0.03 256);--accent-line:oklch(82% 0.07 256);
   --shadow:0 1px 2px oklch(24% 0.02 262 / .05),0 8px 24px -12px oklch(24% 0.04 262 / .18);
-  --c-research:oklch(56% 0.135 255);--c-product:oklch(57% 0.11 165);--c-newsletter:oklch(56% 0.15 300);
-  --c-news:oklch(62% 0.13 66);--c-paper:oklch(56% 0.13 212);--c-podcast:oklch(58% 0.16 352);
-  --c-video:oklch(60% 0.17 27);--c-tweet:oklch(62% 0.115 196);
+  --c-research:oklch(56% 0.135 255);--c-product:oklch(54% 0.11 165);--c-newsletter:oklch(56% 0.15 300);
+  --c-news:oklch(56% 0.13 66);--c-paper:oklch(53% 0.13 212);--c-podcast:oklch(58% 0.16 352);
+  --c-video:oklch(57% 0.17 27);--c-tweet:oklch(53% 0.115 196);
   --serif:'Newsreader','Iowan Old Style','Source Serif 4',Charter,Georgia,'Songti SC',serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',system-ui,sans-serif;
   --mono:ui-monospace,'SF Mono','JetBrains Mono','Menlo',monospace;
@@ -106,7 +116,7 @@ _BASE_CSS = """
 [data-theme="dark"]{
   --bg:oklch(18.5% 0.016 262);--surface:oklch(21.5% 0.017 262);--surface-2:oklch(24% 0.017 262);
   --inset:oklch(26% 0.017 262);--fg:oklch(92% 0.012 255);--fg-2:oklch(78% 0.014 255);
-  --muted:oklch(66% 0.014 258);--faint:oklch(54% 0.014 258);--border:oklch(30% 0.014 262);
+  --muted:oklch(66% 0.014 258);--faint:oklch(67% 0.014 258);--border:oklch(30% 0.014 262);
   --border-2:oklch(36% 0.016 262);--accent:oklch(72% 0.14 256);--accent-2:oklch(78% 0.13 256);
   --accent-soft:oklch(30% 0.05 256);--accent-line:oklch(42% 0.09 256);
   --shadow:0 1px 2px oklch(0% 0 0 / .3),0 14px 34px -16px oklch(0% 0 0 / .6);
@@ -155,7 +165,8 @@ img{max-width:100%}
 @media(max-width:560px){.top-in{padding:9px 13px;gap:9px}.brand span{display:none}
   .stat{display:none}.nav{margin-left:2px;gap:2px}.nav a{font-size:13px;padding:5px 8px}
   .top-right{flex:1;min-width:0;margin-left:6px;justify-content:flex-end}
-  .search{flex:1;min-width:56px;max-width:240px}.search input{width:100%}}
+  .search{flex:1;min-width:56px;max-width:240px}.search input{width:100%}
+  .foot{font-size:12px}}
 """
 
 _HOME_CSS = """
@@ -245,7 +256,10 @@ _HOME_CSS = """
   .radar-r{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px}}
 @media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}
   .radar-bars{gap:8px}.bar-label{font-size:8.5px}
-  .radar{padding:14px 16px}}
+  .radar{padding:14px 16px}
+  /* 移动端易读性:高频小号 mono 标签提到 12px(桌面编辑体字阶不动) */
+  .kicker h2,.kicker .cnt,.kicker .more,.meta,.lead .when,.sc-cat,.sc-foot,
+  .radar-l .k,.radar-l .s,.radar-r{font-size:12px}}
 """
 
 _FEED_CSS = """
@@ -331,7 +345,10 @@ _FEED_CSS = """
 .day-cats .dc{display:flex;align-items:center;gap:5px;color:var(--muted)}
 .day-cats .dc .dot{width:5px;height:5px;border-radius:50%;background:var(--cat,var(--faint))}
 .day-cats .dc .n{color:var(--fg-2);font-weight:600;letter-spacing:.04em}
-.day-cats .dc.zero{opacity:.32}
+/* 0 计数分类：不用 opacity(会把对比度打到 1.67)，改 --faint 文本(达标) + 灰点表"不活跃" */
+.day-cats .dc.zero{color:var(--faint)}
+.day-cats .dc.zero .dot{background:var(--border-2)}
+.day-cats .dc.zero .n{color:var(--faint);font-weight:400}
 .it-meta .read{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--accent-2);background:var(--accent-soft);padding:1px 6px;border-radius:5px;text-transform:uppercase}
 @media(max-width:880px){
   .shell{grid-template-columns:1fr;gap:18px;padding:20px 24px 56px}
@@ -363,8 +380,9 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 .btn{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:500;font-family:var(--sans);
   border:1px solid var(--border);background:var(--surface);color:var(--fg);padding:8px 14px;border-radius:9px;cursor:pointer;transition:.15s}
 .btn:hover{border-color:var(--accent-line);color:var(--accent-2)}
-.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.btn.primary:hover{background:var(--accent-2);color:#fff}
+/* 主按钮用固定深蓝(两主题同值)：白字对比度 5.6:1。--accent 在暗色是浅蓝(白字仅 2.5)，故不随主题。 */
+.btn.primary{background:oklch(52% 0.17 256);color:#fff;border-color:oklch(52% 0.17 256)}
+.btn.primary:hover{background:oklch(45% 0.17 256);border-color:oklch(45% 0.17 256);color:#fff}
 .btn svg{width:14px;height:14px}
 .read-time{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto}
 .tabs{display:inline-flex;gap:3px;background:var(--inset);padding:3px;border-radius:10px;margin:24px 0 6px}
@@ -702,9 +720,11 @@ def _item_href(item, interactions):
     return f"/item/{_e(item.get('hash', ''))}.html", False
 
 
-def _head(title, page_css, maxw="1080px"):
+def _head(title, page_css, maxw="1080px", desc="AI Radar — 聚合多个 AI 信息源，去重、中译、精读，一站速览每日 AI 动态。"):
     return ('<!doctype html>\n<html lang="zh-CN" data-theme="light">\n<head>\n'
             '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            f'<meta name="description" content="{_e(desc)}">\n'
+            f'{_FAVICON}\n'
             f'<title>{_e(title)}</title>\n'
             f'<script>{_THEME_PRESET}</script>\n'
             f'{_FONT_LINKS}\n<style>\n{_BASE_CSS}\n:root{{--maxw:{maxw}}}\n{page_css}\n</style>\n</head>')
@@ -716,12 +736,12 @@ def _top_header(active, stat="", search_ph="搜索…"):
         return f'<a href="{href}"{cls}>{label}</a>'
     stat_html = f'<span class="stat">{_e(stat)}</span>' if stat else ""
     return (f'<header class="top"><div class="top-in">'
-            f'<a href="/" class="brand">{_BRAND_SVG}<span>AI&nbsp;Radar</span></a>'
+            f'<a href="/" class="brand" aria-label="AI Radar">{_BRAND_SVG}<span>AI&nbsp;Radar</span></a>'
             f'<nav class="nav">{nav("/", "总览", "home")}{nav("/feed.html", "时间流", "feed")}'
             f'{nav("/reads.html", "精读", "reads")}</nav>'
             f'{stat_html}'
             f'<div class="top-right"><div class="search">{_SEARCH_SVG}'
-            f'<input id="search" type="search" placeholder="{_e(search_ph)}" autocomplete="off"></div>'
+            f'<input id="search" type="search" placeholder="{_e(search_ph)}" aria-label="{_e(search_ph)}" autocomplete="off"></div>'
             f'<button class="icon-btn" id="theme" aria-label="切换深浅色">{_SUNMOON_SVG}</button>'
             f'</div></div></header>')
 
@@ -1134,13 +1154,55 @@ def _bili_bv(url):
     return m.group(1) if m else ""
 
 
+def _localize_cover(url):
+    """纯查表:封面已被 _prefetch_covers 下到同源 /thumb/ 则返回本地路径,否则原样返回(不在渲染叶子里做 I/O,
+    所以直接调 _facade 的测试零网络、零副作用)。"""
+    return _thumb_cache.get(url, url)
+
+
+def _download_cover(url):
+    """把单个外站封面下到 dist/thumb/(URL 寻址、幂等),成功填 _thumb_cache[url]=/thumb/...，失败回退原 URL。"""
+    if not url or not url.startswith("http") or url in _thumb_cache:
+        return
+    name = hashlib.md5(url.encode()).hexdigest()[:16] + ".jpg"
+    dest = DIST_THUMB / name
+    if dest.exists():
+        _thumb_cache[url] = f"/thumb/{name}"
+        return
+    try:
+        DIST_THUMB.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run(["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "15", "-o", str(dest), url],
+                           capture_output=True, timeout=20)
+        if r.returncode == 0 and dest.exists() and dest.stat().st_size >= 500:
+            _thumb_cache[url] = f"/thumb/{name}"
+        else:
+            dest.unlink(missing_ok=True)
+            _thumb_cache[url] = url  # 失败 → 回退外链(不破图)
+    except Exception:  # noqa: BLE001
+        dest.unlink(missing_ok=True)
+        _thumb_cache[url] = url
+
+
+def _prefetch_covers(items):
+    """渲染前并发把视频封面(YouTube 缩略图)下到同源 /thumb/。外站封面是视频详情页 LCP 元素,
+    同源后桌面 LCP 从 ~2s 降到快路径。只处理 YouTube(B站封面国内可直连、且为少数)。"""
+    urls = {f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"
+            for it in items if (vid := _yt_id(it.get("url", "")))}
+    if not urls:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(_download_cover, urls))
+
+
 def _facade(cover, src, badge, data_attr, hint="点击播放", duration="", published=""):
     """通用 lite 门面：封面 + 播放钮 + 角标(badge 顶左 hint 顶右 时长右下);点击才由 _DETAIL_JS 挂 iframe。
     duration/published 留空则不渲染对应角标(诚实空态,不造假)。"""
+    cover = _localize_cover(cover)  # 外站封面 → 同源 /thumb/(降 LCP,避免外站图拖慢详情页)
     dur_html = f'<span class="dur">{_e(duration)}</span>' if duration else ""
     pub_html = f'<span class="pub">{_e(published)}</span>' if published else ""
     return (f'<div class="facade" {data_attr}>'
-            f'<img class="thumb" src="{cover}" alt="" loading="lazy">'
+            f'<img class="thumb" src="{cover}" alt="" fetchpriority="high">'
             f'<div class="hint">{hint}</div>'
             f'{pub_html}{dur_html}'
             f'<div class="play"><span class="pbtn">{_PLAY_SVG}</span></div>'
@@ -1179,39 +1241,71 @@ def _bili_embed(bili_url, yt_url, src="", item=None):
     return _facade(cover, src, "哔哩哔哩 · 中文翻译", data, hint="中文翻译 · 点击播放", published=pub)
 
 
-# v2:文章正文 h2/h3 注入 id 并抽出 outline(供右浮目录使用)。
-_H_TAG_RE = re.compile(r'<h([23])([^>]*)>(.+?)</h\1>', re.S)
+# v2:文章正文标题注入 id 并抽出 outline(供右浮目录使用)。匹配 h1-h6,渲染时钳制层级。
+_H_TAG_RE = re.compile(r'<h([1-6])([^>]*)>(.+?)</h\1>', re.S)
 
 
 def _inject_outline_ids(html_str, outline, seen, kept_max=18):
-    """对 html_str 里所有 h2/h3:已有 id 跳过、否则按 inner text 生成 slug(去重)并注入。
-    同时把前 kept_max 条收入 outline(list of (lvl, slug, text))。"""
+    """把正文里所有标题(h1-h6)钳制到连续的 h2/h3 层级,注入去重 slug id,按归一后层级收 outline。
+    钳制规则:页面 h1 之下,正文标题 ≥h2、≤h3、相对上一级不跳级——保证 heading-order 始终有效,
+    不依赖正文是否干净(源站边角料标题也会被压成合法层级;词表截断只是额外的内容清洁)。"""
     def slug_of(text):
         s = re.sub(r'[^\w一-龥]+', '-', text).strip('-')[:40]
         return s or f"h{len(outline) + 1}"
 
+    state = {"prev": 1}  # 页面 h1 = level 1
+
     def repl(m):
-        lvl = int(m.group(1)); attrs = m.group(2) or ""; inner = m.group(3)
+        orig = int(m.group(1)); attrs = m.group(2) or ""; inner = m.group(3)
         text = re.sub(r'<[^>]+>', '', inner).strip()
         if not text:
             return m.group(0)
-        if 'id=' in attrs:
-            return m.group(0)
-        sl = slug_of(text); base = sl; i = 0
-        while sl in seen:
-            i += 1; sl = f"{base}-{i}"
+        lvl = max(2, min(orig, 3, state["prev"] + 1))  # ≥h2、≤h3、不跳级
+        state["prev"] = lvl
+        mid = re.search(r'id="([^"]*)"', attrs)
+        if mid:
+            sl, new_attrs = mid.group(1), attrs
+        else:
+            sl = slug_of(text); base = sl; i = 0
+            while sl in seen:
+                i += 1; sl = f"{base}-{i}"
+            new_attrs = f' id="{sl}"{attrs}'
         seen.add(sl)
         if len(outline) < kept_max:
             outline.append((lvl, sl, text))
-        return f'<h{lvl} id="{sl}"{attrs}>{inner}</h{lvl}>'
+        return f'<h{lvl}{new_attrs}>{inner}</h{lvl}>'
 
     return _H_TAG_RE.sub(repl, html_str)
+
+
+# 直出正文末尾常见的源站边角料区块标题（相关阅读/最新/订阅等）——渲染时从这里整段截断
+_DOC_BOILER_HEADING = re.compile(
+    r"(?i)^\s*(related\b|latest\b|more (from|in|stories|on)\b|read more\b|recommended\b"
+    r"|most popular\b|popular (stories|posts|articles)\b|trending\b|you might\b"
+    r"|sign\s*up\b|subscribe\b|newsletters?\b|editor'?s picks\b|from our\b|sponsored\b|advertisement\b)"
+)
+_LEAD_H1 = re.compile(r"(?is)^\s*<h1[^>]*>.*?</h1>\s*")
+
+
+def _strip_doc_boilerplate(html_str):
+    """渲染前清理直出正文里混入的源站边角料（只动渲染输出、不碰库）：
+    ① 去掉开头与页面标题重复的 <h1>（正文不该有自己的 h1，页面已有 h1.title）；
+    ② 从第一个"相关阅读/最新/订阅"等边角料区块标题处整段截断（连同其后的相关链接列表）。
+    既清正文与右栏目录，又顺带消除由此引发的 heading-order 跳级。"""
+    if not html_str:
+        return html_str
+    html_str = _LEAD_H1.sub("", html_str, count=1)
+    for m in re.finditer(r"(?is)<(h[1-6])[^>]*>(.*?)</\1>", html_str):
+        text = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        if _DOC_BOILER_HEADING.match(text):
+            return html_str[:m.start()].rstrip()
+    return html_str
 
 
 def _tabs(item):
     """文章态 tabs：原文（content_html）/ 中文翻译（translation_md 有则渲染全文，无则诚实空态）。
     返回 (tabs_html, outline)。outline 优先取译文,无则取原文,从而 outline 内容与默认打开的 tab 一致。"""
-    content = _lazy_imgs(item.get("content_html") or "")
+    content = _strip_doc_boilerplate(_lazy_imgs(item.get("content_html") or ""))
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
     tmd = (item.get("translation_md") or "").strip()
     if tmd:
@@ -1376,6 +1470,7 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
     _ICONS = icons or {}
     _img_have_cache[0] = None  # 每次渲染重读 dist/img(丢图防御按当前文件状态判定)
     out = Path(out_dir) if out_dir else DIST
+    _prefetch_covers(items)  # 视频封面 → 同源 /thumb/(降详情页 LCP);叶子 _facade 只查表
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
     (out / "sources.html").unlink(missing_ok=True)
@@ -1385,4 +1480,19 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
     for it in items:
         if it.get("hash") and interactions.get(it.get("source_id"), "detail") != "link":
             _render_detail(it, out, descriptions)
+    # Cloudflare Pages 缓存策略：图标/进站图/封面按内容寻址、几乎不变 → 长缓存；HTML 留默认(每访问 revalidate)。
+    (out / "_headers").write_text(
+        "/icons/*\n  Cache-Control: public, max-age=604800\n"
+        "/img/*\n  Cache-Control: public, max-age=604800\n"
+        "/thumb/*\n  Cache-Control: public, max-age=604800\n",
+        encoding="utf-8",
+    )
+    # /thumb 引用 gc:删掉本次渲染未再引用的封面(随条目老化清理,防止无限增长)。
+    if DIST_THUMB.exists():
+        refd = set()
+        for f in out.rglob("*.html"):
+            refd.update(re.findall(r'/thumb/([^"]+)', f.read_text(encoding="utf-8")))
+        for p in DIST_THUMB.iterdir():
+            if p.name not in refd:
+                p.unlink()
     return out / "index.html"
