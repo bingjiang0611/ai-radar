@@ -6,6 +6,7 @@
 """
 
 import hashlib
+import os
 import re
 import subprocess
 from html import escape as _escape, unescape as _unescape
@@ -81,15 +82,17 @@ def _is_image(data):
     return head[:4] == b"<svg" or (head[:5] == b"<?xml" and b"<svg" in head)
 
 
-def _download_image(url):
+def _download_image(url, max_time=20, timeout=25):
     """下载图片 → dist/img/{hash}{ext}；返回站内路径 /img/... 或 None（失败/过大/非图片）。"""
     url = _unescape(url)  # HTML 属性里的 &amp; → & —— 否则带 query 的 URL(如 Next.js _next/image?...&w=)参数传不全
+    max_time = max(1, int(max_time))
+    timeout = max(max_time + 1, int(timeout))
     try:
         r = subprocess.run(
             # --max-filesize 在 Content-Length 已知时提前中止超大图(不必下完再丢),省内存/带宽
-            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", "20",
+            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", str(max_time),
              "--max-filesize", str(_MAX_IMG_BYTES), url],
-            capture_output=True, timeout=25,
+            capture_output=True, timeout=timeout,
         )
     except Exception:  # noqa: BLE001 — 单张图失败不影响整篇
         return None
@@ -257,6 +260,36 @@ def _fetch_direct(url, timeout=30):
     return _extract_article(r.stdout)
 
 
+def _jina_curl_args(url, max_time):
+    args = ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", str(max_time)]
+    key = _jina_api_key()
+    if key:
+        args += ["-H", f"Authorization: Bearer {key}"]
+    return args + [f"https://r.jina.ai/{url}"]
+
+
+def _jina_api_key():
+    """Jina Reader API key: env first, then macOS Keychain.
+
+    Store the key without writing it into the repo:
+    security add-generic-password -U -a "$USER" -s JINA_API_KEY -w "<key>"
+    """
+    key = os.environ.get("JINA_API_KEY", "").strip()
+    if key:
+        return key
+    user = os.environ.get("USER", "").strip()
+    if not user or not Path("/usr/bin/security").exists():
+        return ""
+    try:
+        r = subprocess.run(
+            ["/usr/bin/security", "find-generic-password", "-a", user, "-s", "JINA_API_KEY", "-w"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=3,
+        )
+    except Exception:  # noqa: BLE001 — keychain lookup is optional
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
 def fetch_article_html(url, timeout=60):
     """取单篇正文 HTML：Jina 优先（救 SPA/隐私护栏站）→ Jina 失败再直连 curl 抽正文（救 Jina 限流的新闻站）。
     都拿不到/被 Cloudflare 挡 → 返回 ""（详情页回退到摘要 +「打开原文」）。"""
@@ -264,7 +297,7 @@ def fetch_article_html(url, timeout=60):
         return ""
     try:
         r = subprocess.run(
-            ["curl", "-sL", "-A", "Mozilla/5.0", "--max-time", str(timeout - 5), f"https://r.jina.ai/{url}"],
+            _jina_curl_args(url, timeout - 5),
             capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
     except Exception:  # noqa: BLE001

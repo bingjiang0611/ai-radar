@@ -248,13 +248,22 @@ _HOME_CSS = """
 .src-card:hover .sc-peek{color:var(--fg);-webkit-line-clamp:2}
 .sc-foot .fresh{color:var(--accent-2);font-weight:600;letter-spacing:.04em}
 .kicker .more{font-family:var(--mono);font-size:11px;color:var(--accent-2);letter-spacing:.04em;text-decoration:none}
+/* 精翻:人工挑选的中文精读置顶板块 */
+.jf-section{margin-bottom:30px}
+.jf-ic{width:12px;height:12px;color:var(--accent-2);flex:none}
+.jf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.jf-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--cat,var(--accent-line));border-radius:12px;padding:15px 18px;display:flex;flex-direction:column;gap:9px;box-shadow:var(--shadow);text-decoration:none;transition:background .15s,transform .15s}
+.jf-card:hover{background:var(--surface-2);transform:translateY(-1px)}
+.jf-card h3{font-family:var(--serif);font-weight:600;font-size:16.5px;line-height:1.32;letter-spacing:-.005em;color:var(--fg)}
+.jf-kind{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--accent-2);font-weight:600}
 @media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.front{grid-template-columns:1fr}
+  .jf-grid{grid-template-columns:repeat(2,1fr)}
   .lead{border-right:0;border-bottom:1px solid var(--border);min-height:0}.lead h3{font-size:27px}
   .front-row{grid-template-columns:1fr}
   .radar{grid-template-columns:1fr;gap:14px}
   .radar-l{border-right:0;border-bottom:1px solid var(--border);padding-right:0;padding-bottom:14px;flex-direction:row;align-items:baseline;gap:16px}
   .radar-r{flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px}}
-@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}
+@media(max-width:560px){.wrap{padding:22px 16px 48px}.grid{grid-template-columns:1fr}.jf-grid{grid-template-columns:1fr}
   .radar-bars{gap:8px}.bar-label{font-size:8.5px}
   .radar{padding:14px 16px}
   /* 移动端易读性:高频小号 mono 标签提到 12px(桌面编辑体字阶不动) */
@@ -922,6 +931,39 @@ def _render_home(items, descriptions, methods, interactions, out):
             f'<div class="grid">\n{cards}\n</div></section>')
     dir_html = "\n".join(sections) if sections else ""
 
+    # === 精翻:人工挑选的中文深读(全文翻译 / 视频总结 / B站译制),置顶于「最新」之上 ===
+    jf_items = [it for it in items if _has_zh_deep(it)]
+    jingfan_html = ""
+    if jf_items:
+        def _jf_kind(it):
+            if (it.get("translation_md") or "").strip():
+                return "全文翻译"
+            if (it.get("summary_md") or "").strip():
+                return "视频总结"
+            return "B站译制"
+
+        def _jf_anchor(it):
+            return "?from=reads" if (it.get("summary_md") or "").strip() else "?from=reads#zh"
+
+        jf_cards = []
+        for it in jf_items[:9]:
+            jh, _ = _item_href(it, interactions)
+            jt = it.get("title_zh") or it.get("title") or ""
+            jf_cards.append(
+                f'<a class="jf-card {_cat_class(it.get("category",""))}" href="{jh}{_jf_anchor(it)}">'
+                f'<div class="meta"><span class="dot"></span><span class="src">{_e(it.get("source_label",""))}</span>'
+                f'<span>·</span><span class="jf-kind">{_jf_kind(it)}</span></div>'
+                f'<h3>{_e(jt)}</h3></a>')
+        jf_more = (f'<a href="/reads.html" class="more">看全部 {len(jf_items)} 篇 →</a>'
+                   if len(jf_items) > 9 else '<a href="/reads.html" class="more">进精读 →</a>')
+        jingfan_html = (
+            '<section class="jf-section"><div class="kicker">'
+            '<svg class="jf-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">'
+            '<path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.4 2.4-7.4L2 9.4h7.6L12 2z" stroke-linejoin="round"/></svg>'
+            f'<h2>精翻 · 中文精读</h2><span class="cnt">{len(jf_items)} 篇</span>'
+            f'<span class="rule"></span>{jf_more}</div>'
+            f'<div class="jf-grid">\n' + "\n".join(jf_cards) + '\n</div></section>')
+
     total = sum(s["count"] for s in stats.values())
     latest = max((s["latest"] for s in stats.values()), default="")
     stat = f"{len(stats)} 来源 · {total} 条 · {_fmt_md(latest)} 更新"
@@ -929,7 +971,7 @@ def _render_home(items, descriptions, methods, interactions, out):
 
     page = (_head("AI Radar — 来源总览", _HOME_CSS)
             + "\n<body>\n" + _top_header("home", stat=stat, search_ph="搜来源 · 回车搜内容")
-            + '\n<main class="wrap">\n' + radar_html + "\n" + front_html
+            + '\n<main class="wrap">\n' + radar_html + "\n" + jingfan_html + "\n" + front_html
             + f'\n<div class="dir">\n{dir_html}\n<p class="empty" id="empty">没有匹配的来源。</p>\n</div>\n</main>\n'
             + f'<footer class="foot"><span>AI&nbsp;RADAR</span><span class="sep">·</span>'
             + f'<span>本地聚合 · 无登录分享</span><span class="sep">·</span>'

@@ -1,5 +1,7 @@
 """ai-radar 单测：URL 归一化 / 去重 / RSS·Atom 解析 / JSON 解析。零网络。"""
 
+import contextlib
+import io
 import json
 import re
 import sqlite3
@@ -7,11 +9,14 @@ import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import content                                         # noqa: E402
+import check_browser_policy                            # noqa: E402
+import fetch_x                                         # noqa: E402
 import render                                           # noqa: E402
 from fetch import normalize_url, resolve_url, is_paywalled  # noqa: E402
 from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
@@ -264,6 +269,203 @@ class TestContent(unittest.TestCase):
         # 付费墙 stub / 纯导航:正文 <200 字 → 视为没抓到
         self.assertEqual(content._extract_article("<article><p>" + "x" * 70 + "</p></article>"), "")
 
+    def test_jina_curl_args_adds_auth_when_key_exists(self):
+        with mock.patch.dict(content.os.environ, {"JINA_API_KEY": "jina_test"}, clear=True):
+            args = content._jina_curl_args("https://example.com/a", 15)
+        self.assertIn("-H", args)
+        self.assertIn("Authorization: Bearer jina_test", args)
+
+    def test_jina_curl_args_adds_auth_from_keychain(self):
+        fake = mock.Mock(returncode=0, stdout="jina_keychain\n")
+        with mock.patch.dict(content.os.environ, {"USER": "me"}, clear=True), \
+             mock.patch.object(content.subprocess, "run", return_value=fake):
+            args = content._jina_curl_args("https://example.com/a", 15)
+        self.assertIn("-H", args)
+        self.assertIn("Authorization: Bearer jina_keychain", args)
+
+    def test_jina_curl_args_omits_auth_without_key(self):
+        fake = mock.Mock(returncode=44, stdout="")
+        with mock.patch.dict(content.os.environ, {"USER": "me"}, clear=True), \
+             mock.patch.object(content.subprocess, "run", return_value=fake):
+            args = content._jina_curl_args("https://example.com/a", 15)
+        self.assertNotIn("-H", args)
+
+    def test_download_image_accepts_short_timeouts(self):
+        old_dist_img = content.DIST_IMG
+        fake_png = b"\x89PNG\r\n\x1a\nabc"
+        with TemporaryDirectory() as td:
+            content.DIST_IMG = Path(td)
+            fake = mock.Mock(returncode=0, stdout=fake_png)
+            try:
+                with mock.patch.object(content.subprocess, "run", return_value=fake) as run:
+                    self.assertTrue(content._download_image("https://example.com/a.png", max_time=3, timeout=4))
+                args, kwargs = run.call_args
+                curl_args = args[0]
+                self.assertEqual(curl_args[curl_args.index("--max-time") + 1], "3")
+                self.assertEqual(kwargs["timeout"], 4)
+            finally:
+                content.DIST_IMG = old_dist_img
+
+
+class TestFetchX(unittest.TestCase):
+    def test_download_tweet_image_uses_cache_and_short_timeout(self):
+        old_cache, old_stats, old_deadline = fetch_x._IMG_CACHE, fetch_x._IMG_STATS, fetch_x._IMAGE_DEADLINE
+        fetch_x._IMG_CACHE = {}
+        fetch_x._IMG_STATS = {"attempt": 0, "ok": 0, "fail": 0, "budget_skip": 0, "cache": 0}
+        fetch_x._IMAGE_DEADLINE = None
+        try:
+            with mock.patch.object(fetch_x.content, "_download_image", return_value="/img/a.jpg") as dl:
+                self.assertEqual(fetch_x._download_tweet_image("https://pbs.twimg.com/a.jpg"), "/img/a.jpg")
+                self.assertEqual(fetch_x._download_tweet_image("https://pbs.twimg.com/a.jpg"), "/img/a.jpg")
+            dl.assert_called_once()
+            self.assertEqual(dl.call_args.kwargs["max_time"], fetch_x.IMAGE_MAX_TIME)
+            self.assertEqual(dl.call_args.kwargs["timeout"], fetch_x.IMAGE_TIMEOUT)
+            self.assertEqual(fetch_x._IMG_STATS["cache"], 1)
+        finally:
+            fetch_x._IMG_CACHE, fetch_x._IMG_STATS, fetch_x._IMAGE_DEADLINE = old_cache, old_stats, old_deadline
+
+    def test_duplicate_complete_tweet_skips_expensive_to_item(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "config").mkdir()
+            (root / "config" / "sources.json").write_text(json.dumps({"sources": [{
+                "id": "x-test",
+                "source_label": "X",
+                "category": "推文",
+                "parser": "browser",
+                "fetch": "twitter-cli",
+                "url": "https://x.com/i/lists/1",
+            }]}), encoding="utf-8")
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            init_db(conn)
+            source = {"id": "x-test", "source_label": "X", "category": "推文"}
+            url = "https://x.com/alice/status/1"
+            insert_items([{"title": "@alice：AI model", "url": url,
+                           "tweet_meta": json.dumps({"avatar": "/img/a.jpg", "quote": None})}], source, conn)
+            tweet = {"id": "1", "text": "AI model", "createdAtISO": datetime.now(timezone.utc).isoformat(),
+                     "author": {"screenName": "alice", "profileImageUrl": "https://pbs.twimg.com/a.jpg"}}
+            with mock.patch.object(fetch_x, "ROOT", root), \
+                 mock.patch.object(fetch_x, "_conn", return_value=conn), \
+                 mock.patch.object(fetch_x, "fetch_list", return_value=[tweet]), \
+                 mock.patch.object(fetch_x, "to_item", side_effect=AssertionError("to_item should not run")), \
+                 mock.patch.object(sys, "argv", ["fetch_x.py", "x-test"]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(fetch_x.main(), 0)
+
+    def test_merge_existing_media_preserves_quote_translation(self):
+        row = {"content_html": "", "tweet_meta": json.dumps({
+            "avatar": "",
+            "quote": {"text": "old", "text_zh": "旧译文", "image": "", "avatar": ""}
+        }, ensure_ascii=False)}
+        item = {"content_html": '<img src="/img/p.png">', "tweet_meta": json.dumps({
+            "avatar": "/img/a.jpg",
+            "quote": {"text": "new", "text_zh": "", "image": "/img/q.png", "avatar": "/img/qa.jpg",
+                      "detail_checked": True}
+        }, ensure_ascii=False)}
+        html, meta, changed = fetch_x._merge_existing_media(row, item)
+        merged = json.loads(meta)
+        self.assertTrue(changed)
+        self.assertIn("/img/p.png", html)
+        self.assertEqual(merged["quote"]["text_zh"], "旧译文")
+        self.assertEqual(merged["quote"]["image"], "/img/q.png")
+
+
+class TestBrowserPolicy(unittest.TestCase):
+    def test_browser_origins_include_apex_and_www_redirect_variants(self):
+        old_root = check_browser_policy.ROOT
+        with TemporaryDirectory() as td:
+            root = Path(td) / "radar"
+            (root / "config").mkdir(parents=True)
+            (root / "config" / "sources.json").write_text(json.dumps({"sources": [
+                {
+                    "id": "apex",
+                    "source_label": "Apex",
+                    "category": "产品",
+                    "parser": "browser",
+                    "url": "https://example.com/blog",
+                    "enabled": True,
+                },
+                {
+                    "id": "www",
+                    "source_label": "WWW",
+                    "category": "产品",
+                    "parser": "browser",
+                    "url": "https://www.example.org/news",
+                    "enabled": True,
+                },
+            ]}), encoding="utf-8")
+            check_browser_policy.ROOT = root
+            try:
+                origins = set(check_browser_policy.browser_origins())
+            finally:
+                check_browser_policy.ROOT = old_root
+        self.assertIn("https://example.com", origins)
+        self.assertIn("https://www.example.com", origins)
+        self.assertIn("https://example.org", origins)
+        self.assertIn("https://www.example.org", origins)
+
+    def test_update_origins_block_moves_required_to_allowed(self):
+        text = """[origins]
+denied = [
+    "https://a.example",
+    "https://b.example",
+]
+
+[other]
+x = 1
+"""
+        out = check_browser_policy.update_origins_block(
+            text,
+            {"https://a.example", "https://c.example"},
+            {"https://b.example"},
+        )
+        self.assertIn('[other]\nx = 1', out)
+        self.assertIn('allowed = [\n    "https://a.example",\n    "https://c.example",\n]', out)
+        self.assertIn('denied = [\n    "https://b.example",\n]', out)
+        self.assertNotIn('"https://a.example",\n    "https://b.example"', out)
+
+    def test_default_session_prefers_current_codex_thread_id(self):
+        old_sessions = check_browser_policy.SESSIONS
+        with TemporaryDirectory() as td:
+            check_browser_policy.SESSIONS = Path(td)
+            latest = Path(td) / "latest.toml"
+            current = Path(td) / "thread-123.toml"
+            latest.write_text("[origins]\ndenied = []\n", encoding="utf-8")
+            current.write_text("[origins]\nallowed = []\n", encoding="utf-8")
+            with mock.patch.dict(check_browser_policy.os.environ, {"CODEX_THREAD_ID": "thread-123"}):
+                self.assertEqual(check_browser_policy.default_session(), current)
+        check_browser_policy.SESSIONS = old_sessions
+
+    def test_fix_can_create_current_thread_session(self):
+        old_root = check_browser_policy.ROOT
+        old_sessions = check_browser_policy.SESSIONS
+        with TemporaryDirectory() as td:
+            root = Path(td) / "radar"
+            sessions = Path(td) / "sessions"
+            (root / "config").mkdir(parents=True)
+            (root / "config" / "sources.json").write_text(json.dumps({"sources": [{
+                "id": "site",
+                "source_label": "Site",
+                "category": "产品",
+                "parser": "browser",
+                "url": "https://example.com/blog",
+                "enabled": True,
+            }]}), encoding="utf-8")
+            check_browser_policy.ROOT = root
+            check_browser_policy.SESSIONS = sessions
+            with mock.patch.dict(check_browser_policy.os.environ, {"CODEX_THREAD_ID": "new-thread"}), \
+                 mock.patch.object(sys, "argv", ["check_browser_policy.py", "--fix"]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(check_browser_policy.main(), 0)
+            created = sessions / "new-thread.toml"
+            self.assertTrue(created.exists())
+            allowed, denied = check_browser_policy.load_origins(created)
+            self.assertIn("https://example.com", allowed)
+            self.assertNotIn("https://example.com", denied)
+        check_browser_policy.ROOT = old_root
+        check_browser_policy.SESSIONS = old_sessions
+
 
 class TestRetention(unittest.TestCase):
     def setUp(self):
@@ -295,6 +497,17 @@ class TestRetention(unittest.TestCase):
 
 
 class TestRender(unittest.TestCase):
+    def setUp(self):
+        self._tmp_img_dir = TemporaryDirectory()
+        self._old_dist_img = content.DIST_IMG
+        content.DIST_IMG = Path(self._tmp_img_dir.name)
+        render._img_have_cache[0] = None
+
+    def tearDown(self):
+        content.DIST_IMG = self._old_dist_img
+        render._img_have_cache[0] = None
+        self._tmp_img_dir.cleanup()
+
     def test_card_detail_links_to_page(self):
         card = render._card({"hash": "h1", "title": "T", "source_id": "s", "category": "Newsletter"}, "detail")
         self.assertIn('href="/item/h1.html"', card)

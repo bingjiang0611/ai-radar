@@ -12,20 +12,37 @@ ai-radar 不调 x-operator 的脚本,只调 `twitter` 这个二进制(同 gh/yt-
 
 import html
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from shutil import which
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import content                                          # noqa: E402
-from store import insert_items, url_hash, hash_exists   # noqa: E402
+import content                                             # noqa: E402
+from store import insert_items, url_hash, _conn, init_db    # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 _TCO = re.compile(r"https?://t\.co/\S+")
+
+
+def _env_int(name, default):
+    try:
+        return int(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name, default):
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
 
 
 def _tweet_text(t):
@@ -51,7 +68,19 @@ def is_reply(t):
     return (t.get("text", "") or "").lstrip().startswith("@")
 
 SINCE_HOURS = 24   # 只收最近 24 小时的推文(可被源里 window_hours 覆盖)
-FETCH_N = 200      # twitter-cli 单次抓取上限 ~200;最活跃列表 24h 超 200 条仍会截断(告警提示)
+FETCH_N = _env_int("AI_RADAR_FETCH_N", 200)  # 最活跃列表 24h 超 200 条时可临时调大
+SKIP_QUOTE_DETAIL = os.environ.get("AI_RADAR_SKIP_QUOTE_DETAIL", "").lower() in {"1", "true", "yes"}
+SKIP_IMAGES = os.environ.get("AI_RADAR_SKIP_IMAGES", "").lower() in {"1", "true", "yes"}
+QUOTE_TIMEOUT = _env_int("AI_RADAR_QUOTE_TIMEOUT", 30)
+QUOTE_BUDGET = _env_float("AI_RADAR_QUOTE_BUDGET", 60)
+IMAGE_TIMEOUT = _env_int("AI_RADAR_X_IMAGE_TIMEOUT", 8)
+IMAGE_MAX_TIME = _env_int("AI_RADAR_X_IMAGE_MAX_TIME", 6)
+IMAGE_BUDGET = _env_float("AI_RADAR_X_IMAGE_BUDGET", 90)
+_QUOTE_DEADLINE = None
+_IMAGE_DEADLINE = None
+_IMG_CACHE = {}
+_IMG_STATS = {"attempt": 0, "ok": 0, "fail": 0, "budget_skip": 0, "cache": 0}
+_QUOTE_STATS = {"attempt": 0, "ok": 0, "budget_skip": 0}
 
 # 英文按词边界(避免 "ai" 命中 "said"),中文按子串。
 _AI_EN = re.compile(
@@ -94,9 +123,14 @@ def first_json(text):
         return None
 
 
+def twitter_cmd():
+    """定位 twitter-cli。Codex shell 的 PATH 可能没有 ~/.local/bin。"""
+    return os.environ.get("TWITTER_CLI") or which("twitter") or str(Path.home() / ".local/bin/twitter")
+
+
 def fetch_list(list_id, n):
     r = subprocess.run(
-        ["twitter", "list", list_id, "-n", str(n), "--json"],
+        [twitter_cmd(), "list", list_id, "-n", str(n), "--json"],
         capture_output=True, encoding="utf-8", errors="replace", timeout=300,
     )
     obj = first_json(r.stdout)
@@ -105,32 +139,99 @@ def fetch_list(list_id, n):
     return obj if isinstance(obj, list) else []
 
 
+def _budget_left(deadline):
+    if deadline is None:
+        return None
+    return max(0.0, deadline - time.monotonic())
+
+
+def _image_deadline():
+    global _IMAGE_DEADLINE
+    if IMAGE_BUDGET <= 0:
+        return None
+    if _IMAGE_DEADLINE is None:
+        _IMAGE_DEADLINE = time.monotonic() + IMAGE_BUDGET
+    return _IMAGE_DEADLINE
+
+
+def _quote_deadline():
+    global _QUOTE_DEADLINE
+    if QUOTE_BUDGET <= 0:
+        return None
+    if _QUOTE_DEADLINE is None:
+        _QUOTE_DEADLINE = time.monotonic() + QUOTE_BUDGET
+    return _QUOTE_DEADLINE
+
+
+def _download_tweet_image(url):
+    """X 媒体小图下载：运行内缓存 + 总预算，避免重复头像把整轮抓取拖死。"""
+    if not url or SKIP_IMAGES:
+        return ""
+    if url in _IMG_CACHE:
+        _IMG_STATS["cache"] += 1
+        return _IMG_CACHE[url]
+    left = _budget_left(_image_deadline())
+    if left is not None and left < 2:
+        _IMG_STATS["budget_skip"] += 1
+        return ""
+    timeout = IMAGE_TIMEOUT if left is None else min(IMAGE_TIMEOUT, max(2, int(left)))
+    max_time = min(IMAGE_MAX_TIME, max(1, timeout - 1))
+    _IMG_STATS["attempt"] += 1
+    local = content._download_image(url, max_time=max_time, timeout=timeout) or ""
+    _IMG_CACHE[url] = local
+    _IMG_STATS["ok" if local else "fail"] += 1
+    return local
+
+
+def _quote_timeout_left():
+    left = _budget_left(_quote_deadline())
+    if left is not None and left < 2:
+        _QUOTE_STATS["budget_skip"] += 1
+        return 0
+    return QUOTE_TIMEOUT if left is None else min(QUOTE_TIMEOUT, max(2, int(left)))
+
+
 def _fetch_quote_detail(qid):
     """二次抓被引用推:父推的 quotedTweet 只给 {id,text(截断),author},**不给配图**。
     用被引推自己的 id 再抓一次,取全文 + 配图(下载进站)+ 引用作者头像。
     被引推已删/受保护/抓取失败 → 返回 None,调用方退回纯文本引用(不崩、不清空已有引用)。"""
-    if not qid:
+    if not qid or SKIP_QUOTE_DETAIL:
+        return None
+    timeout = _quote_timeout_left()
+    if not timeout:
         return None
     try:
+        _QUOTE_STATS["attempt"] += 1
         r = subprocess.run(
-            ["twitter", "tweet", str(qid), "--json"],
-            capture_output=True, encoding="utf-8", errors="replace", timeout=120,
+            [twitter_cmd(), "tweet", str(qid), "--json"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
         obj = first_json(r.stdout)
         data = obj.get("data") if isinstance(obj, dict) else None
         t = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
         if not isinstance(t, dict):
-            return None
+            return {"_checked": True}
         a = t.get("author") or {}
         photos = [m.get("url", "") for m in (t.get("media") or [])
                   if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
+        _QUOTE_STATS["ok"] += 1
         return {
+            "_checked": True,
             "text": re.sub(r"\s+", " ", html.unescape(t.get("text", "") or "")).strip(),
-            "image": (content._download_image(photos[0]) or "") if photos else "",
-            "avatar": (content._download_image(a.get("profileImageUrl")) or "") if a.get("profileImageUrl") else "",
+            "image": _download_tweet_image(photos[0]) if photos else "",
+            "avatar": _download_tweet_image(a.get("profileImageUrl")) if a.get("profileImageUrl") else "",
         }
-    except Exception:  # noqa: BLE001 — 二次抓失败不致命,退回纯文本引用
+    except subprocess.TimeoutExpired:
         return None
+    except Exception:  # noqa: BLE001 — 二次抓失败不致命,退回纯文本引用
+        return {"_checked": True}
+
+
+def tweet_url(t):
+    a = t.get("author") or {}
+    handle = a.get("screenName", "") if isinstance(a, dict) else ""
+    tid = str(t.get("id", ""))
+    return f"https://x.com/{handle}/status/{tid}" if handle and tid else ""
 
 
 def to_item(t):
@@ -150,9 +251,10 @@ def to_item(t):
     # 原推带图 → 下载进站(content.process:nh3 + 图片本地化),卡片里展示
     photos = [m.get("url", "") for m in (t.get("media") or [])
               if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
-    imgs = "".join(f'<img src="{u}">' for u in photos[:4])
+    local_photos = [_download_tweet_image(u) for u in photos[:4]]
+    imgs = "".join(f'<img src="{u}">' for u in local_photos if u)
     # tweet_meta:作者头像(进站)+ 名称/认证 + 转发者 + 被引用推(quotedTweet),供卡片还原推特视觉
-    av = content._download_image(a.get("profileImageUrl")) if isinstance(a, dict) and a.get("profileImageUrl") else None
+    av = _download_tweet_image(a.get("profileImageUrl")) if isinstance(a, dict) and a.get("profileImageUrl") else ""
     q = t.get("quotedTweet")
     quote = None
     if isinstance(q, dict) and (q.get("text") or (q.get("author") or {}).get("screenName")):
@@ -162,7 +264,8 @@ def to_item(t):
         quote = {"name": (qa.get("name") or "").strip(), "handle": qa.get("screenName", ""),
                  "text": re.sub(r"\s+", " ", _TCO.sub("", qtext)).strip()[:500],
                  "text_zh": "",  # 非中文引用的中译:Claude 会话回填(同 title_zh,见 ai-radar-scrape skill)
-                 "image": (detail or {}).get("image", ""), "avatar": (detail or {}).get("avatar", "")}
+                 "image": (detail or {}).get("image", ""), "avatar": (detail or {}).get("avatar", ""),
+                 "detail_checked": bool((detail or {}).get("_checked"))}
     meta = {"name": (a.get("name") or "").strip() if isinstance(a, dict) else "", "handle": handle,
             "avatar": av or "", "verified": bool(isinstance(a, dict) and a.get("verified")),
             "rt": rb, "quote": quote}
@@ -174,6 +277,90 @@ def to_item(t):
         "content_html": content.process(imgs) if imgs else "",
         "tweet_meta": json.dumps(meta, ensure_ascii=False),
     }
+
+
+def _json_obj(text):
+    try:
+        obj = json.loads(text or "{}")
+    except ValueError:
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _media_backfill_needed(row, t):
+    """已入库推文若缺头像/配图/quote 详情，允许本轮用列表 payload 增量补齐。"""
+    tm = _json_obj(row["tweet_meta"])
+    a = t.get("author") or {}
+    photos = [m for m in (t.get("media") or []) if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
+    if isinstance(a, dict) and a.get("profileImageUrl") and not tm.get("avatar"):
+        return True
+    if photos and "<img" not in (row["content_html"] or ""):
+        return True
+    q = t.get("quotedTweet")
+    if not isinstance(q, dict):
+        return False
+    old_q = tm.get("quote") or {}
+    qa = q.get("author") or {}
+    if not old_q:
+        return True
+    if isinstance(qa, dict) and qa.get("profileImageUrl") and not old_q.get("avatar"):
+        return True
+    if not SKIP_QUOTE_DETAIL and not old_q.get("detail_checked"):
+        return True
+    return False
+
+
+def _merge_existing_media(row, item):
+    """只补媒体字段，保留已有标题、中译和已有可用媒体。返回 (content_html, tweet_meta, changed)。"""
+    old_meta = _json_obj(row["tweet_meta"])
+    new_meta = _json_obj(item.get("tweet_meta", ""))
+    if old_meta.get("avatar") and not new_meta.get("avatar"):
+        new_meta["avatar"] = old_meta["avatar"]
+    old_q = old_meta.get("quote") or {}
+    new_q = new_meta.get("quote") or {}
+    if old_q and new_q:
+        for k in ("text", "image", "avatar", "text_zh"):
+            if old_q.get(k) and not new_q.get(k):
+                new_q[k] = old_q[k]
+        if old_q.get("text_zh"):
+            new_q["text_zh"] = old_q["text_zh"]
+        if old_q.get("detail_checked"):
+            new_q["detail_checked"] = old_q["detail_checked"] or new_q.get("detail_checked")
+        new_meta["quote"] = new_q
+    elif old_q and not new_q:
+        new_meta["quote"] = old_q
+    content_html = item.get("content_html") or row["content_html"] or ""
+    tweet_meta = json.dumps(new_meta, ensure_ascii=False)
+    changed = content_html != (row["content_html"] or "") or tweet_meta != (row["tweet_meta"] or "")
+    return content_html, tweet_meta, changed
+
+
+def _update_existing_media(c, hash_val, item):
+    row = c.execute("SELECT hash, content_html, tweet_meta FROM items WHERE hash=?", (hash_val,)).fetchone()
+    if not row:
+        return False
+    content_html, tweet_meta, changed = _merge_existing_media(row, item)
+    if changed:
+        c.execute("UPDATE items SET content_html=?, tweet_meta=? WHERE hash=?", (content_html, tweet_meta, hash_val))
+    return changed
+
+
+def _media_suffix(backfilled):
+    parts = []
+    if _IMG_STATS["attempt"] or _IMG_STATS["budget_skip"]:
+        parts.append(
+            f"图片 {_IMG_STATS['ok']}/{_IMG_STATS['attempt']}"
+            + (f",缓存 {_IMG_STATS['cache']}" if _IMG_STATS["cache"] else "")
+            + (f",预算跳过 {_IMG_STATS['budget_skip']}" if _IMG_STATS["budget_skip"] else "")
+        )
+    if _QUOTE_STATS["attempt"] or _QUOTE_STATS["budget_skip"]:
+        parts.append(
+            f"quote详情 {_QUOTE_STATS['ok']}/{_QUOTE_STATS['attempt']}"
+            + (f",预算跳过 {_QUOTE_STATS['budget_skip']}" if _QUOTE_STATS["budget_skip"] else "")
+        )
+    if backfilled:
+        parts.append(f"媒体回填 {backfilled}")
+    return ("；" + "；".join(parts)) if parts else ""
 
 
 def main():
@@ -206,18 +393,36 @@ def main():
     recent = [t for t in recent if not is_reply(t)]    # 去掉回复帖(正文以 @ 开头)
     recent = [t for t in recent if not is_noise(t.get("text", "") or "")]  # 去掉抽奖/转发求互动噪音
     ai = [t for t in recent if is_ai(t.get("text", "") or "")]
-    items, seen = [], set()
-    for t in ai:
-        it = to_item(t)
-        if not it or it["url"] in seen or hash_exists(url_hash(it["url"])):
-            continue
-        seen.add(it["url"])
-        items.append(it)  # content_html 由 to_item 设(带图则为本地化 <img>,否则空)
-    n = insert_items(items, src)
+    items, seen, backfilled = [], set(), 0
+    c = _conn()
+    init_db(c)
+    try:
+        for t in ai:
+            url = tweet_url(t)
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            h = url_hash(url)
+            row = c.execute("SELECT hash, content_html, tweet_meta FROM items WHERE hash=?", (h,)).fetchone()
+            if row:
+                if _media_backfill_needed(row, t):
+                    it = to_item(t)
+                    if it and _update_existing_media(c, h, it):
+                        backfilled += 1
+                continue
+            it = to_item(t)
+            if not it:
+                continue
+            items.append(it)  # content_html 由 to_item 设(带图则为本地化 <img>,否则空)
+        n = insert_items(items, src, c)
+        c.commit()
+    finally:
+        c.close()
     # 最旧一条仍落在窗口内 → FETCH_N 把时间窗截断了,可能漏掉更早但仍在 24h 内的推
     capped = bool(raw) and in_window(raw[-1])
     print(f"{src['source_label']}: 列表 {list_id} 抓 {len(raw)} 条,{hours}h 内 {len(recent)},"
           f"AI 命中 {len(ai)},新增 {n}"
+          + _media_suffix(backfilled)
           + (f"  ⚠️ 最旧一条仍在 {hours}h 内,-n {FETCH_N} 可能截断时间窗有遗漏(调大 FETCH_N)" if capped else ""))
     return 0
 
