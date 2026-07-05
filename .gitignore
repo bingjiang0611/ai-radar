@@ -6,6 +6,7 @@ CLAUDE.md
 data/*.db
 data/*.db-*
 dist/
+.wrangler/
 __pycache__/
 *.pyc
 .venv/
