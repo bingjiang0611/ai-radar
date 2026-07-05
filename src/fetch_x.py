@@ -206,11 +206,13 @@ def _fetch_quote_detail(qid):
             [twitter_cmd(), "tweet", str(qid), "--json"],
             capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
         )
+        if r.returncode != 0:
+            return None
         obj = first_json(r.stdout)
         data = obj.get("data") if isinstance(obj, dict) else None
         t = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else None)
         if not isinstance(t, dict):
-            return {"_checked": True}
+            return None
         a = t.get("author") or {}
         photos = [m.get("url", "") for m in (t.get("media") or [])
                   if isinstance(m, dict) and m.get("type") == "photo" and m.get("url")]
@@ -224,7 +226,7 @@ def _fetch_quote_detail(qid):
     except subprocess.TimeoutExpired:
         return None
     except Exception:  # noqa: BLE001 — 二次抓失败不致命,退回纯文本引用
-        return {"_checked": True}
+        return None
 
 
 def tweet_url(t):

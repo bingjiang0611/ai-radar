@@ -353,6 +353,24 @@ class TestFetchX(unittest.TestCase):
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(fetch_x.main(), 0)
 
+    def test_quote_detail_temporary_failure_stays_retryable(self):
+        old_stats, old_deadline = fetch_x._QUOTE_STATS, fetch_x._QUOTE_DEADLINE
+        fetch_x._QUOTE_STATS = {"attempt": 0, "ok": 0, "budget_skip": 0}
+        fetch_x._QUOTE_DEADLINE = None
+        tweet = {"id": "1", "text": "AI model", "createdAtISO": datetime.now(timezone.utc).isoformat(),
+                 "author": {"screenName": "alice"},
+                 "quotedTweet": {"id": "2", "text": "quoted AI text",
+                                  "author": {"name": "Bob", "screenName": "bob"}}}
+        failed = mock.Mock(returncode=1, stdout="rate limited")
+        try:
+            with mock.patch.object(fetch_x.subprocess, "run", return_value=failed):
+                item = fetch_x.to_item(tweet)
+        finally:
+            fetch_x._QUOTE_STATS, fetch_x._QUOTE_DEADLINE = old_stats, old_deadline
+        meta = json.loads(item["tweet_meta"])
+        self.assertEqual(meta["quote"]["text"], "quoted AI text")
+        self.assertFalse(meta["quote"]["detail_checked"])
+
     def test_merge_existing_media_preserves_quote_translation(self):
         row = {"content_html": "", "tweet_meta": json.dumps({
             "avatar": "",
