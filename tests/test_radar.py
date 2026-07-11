@@ -1,8 +1,7 @@
-"""ai-radar 单测：URL 归一化 / 去重 / RSS·Atom 解析 / JSON 解析。零网络。"""
+"""ai-radar curated publishing tests. No network required."""
 
 import contextlib
 import io
-import json
 import re
 import sqlite3
 import sys
@@ -14,46 +13,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import content                                         # noqa: E402
-import check_browser_policy                            # noqa: E402
-import fetch_x                                         # noqa: E402
-import render                                           # noqa: E402
-from fetch import normalize_url, resolve_url, is_paywalled  # noqa: E402
-from parsers import parse_rss_text, parse_json_text, parse_xiaoyuzhou_text  # noqa: E402
-from store import init_db, insert_items, all_items, url_hash, hash_exists, purge_old  # noqa: E402
-
-RSS_FIXTURE = """<?xml version="1.0"?>
-<rss version="2.0"><channel>
-  <title>Demo</title>
-  <item>
-    <title>First Post</title>
-    <link>https://example.com/a?utm_source=x</link>
-    <description>&lt;p&gt;Hello &lt;b&gt;world&lt;/b&gt;&lt;/p&gt;</description>
-    <pubDate>Wed, 11 Jun 2026 10:00:00 GMT</pubDate>
-  </item>
-  <item><title>Second</title><link>https://example.com/b</link></item>
-</channel></rss>"""
-
-ATOM_FIXTURE = """<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>Vid</title>
-    <link rel="alternate" href="https://youtu.be/xyz"/>
-    <published>2026-06-10T00:00:00Z</published>
-  </entry>
-</feed>"""
-
-JSON_FIXTURE = """[
-  {"paper": {"id": "2606.00001", "title": "Cool Paper", "upvotes": 42}},
-  {"paper": {"id": "2606.00002", "title": "Another", "upvotes": 7}}
-]"""
-
-HF_CFG = {
-    "items_path": "",
-    "title": "paper.title",
-    "url_template": "https://huggingface.co/papers/{paper.id}",
-    "summary_template": "{paper.upvotes} upvotes",
-}
+import content  # noqa: E402
+import publish_item  # noqa: E402
+import render  # noqa: E402
+import run  # noqa: E402
+from store import all_items, init_db, insert_items, normalize_url, purge_old, url_hash  # noqa: E402
 
 
 class TestNormalize(unittest.TestCase):
@@ -63,147 +27,16 @@ class TestNormalize(unittest.TestCase):
             "https://example.com/a?id=1",
         )
 
-    def test_utm_variants_same_hash(self):
-        self.assertEqual(
-            url_hash("https://example.com/a?utm_source=x"),
-            url_hash("https://example.com/a/"),
-        )
-
     def test_query_param_order_same_hash(self):
-        # 参数顺序不同应算同一 URL(排序后归一)——旧版漏判会产生重复行
         self.assertEqual(
             url_hash("https://e.com/a?b=2&a=1"),
             url_hash("https://e.com/a?a=1&b=2"),
         )
 
-    def test_hard_paywall_detected_metered_kept(self):
-        # 硬付费墙(正文拿不到)→ 跳过;计量墙但直连能抓全文的(wired/MIT TR)保留
-        self.assertTrue(is_paywalled("https://www.wsj.com/tech/ai/x"))
-        self.assertTrue(is_paywalled("https://www.bloomberg.com/news/x"))
-        self.assertTrue(is_paywalled("https://ft.com/content/x"))
-        self.assertFalse(is_paywalled("https://www.wired.com/story/x"))
-        self.assertFalse(is_paywalled("https://techcrunch.com/2026/x"))
-
-    def test_keeps_legit_ref_prefix_param(self):
-        # reference_id 是合法参数,不能因前缀 "ref" 被删(旧版 bug);reflink 是真追踪,要删
-        self.assertIn("reference_id=9", normalize_url("https://e.com/a?reference_id=9&reflink=spam"))
-        self.assertNotIn("reflink", normalize_url("https://e.com/a?reference_id=9&reflink=spam"))
-
-
-class TestResolveUrl(unittest.TestCase):
-    def test_no_placeholder_unchanged(self):
-        self.assertEqual(resolve_url("https://x.com/a"), "https://x.com/a")
-
-    def test_week_placeholder(self):
-        self.assertRegex(resolve_url("https://x.com/a?week={week}"), r"\?week=\d{4}-W\d{2}$")
-
-    def test_date_placeholder(self):
-        self.assertRegex(resolve_url("https://x.com/{date}"), r"/\d{4}-\d{2}-\d{2}$")
-
-
-class TestRss(unittest.TestCase):
-    def test_rss_two_items_and_clean_summary(self):
-        items = parse_rss_text(RSS_FIXTURE)
-        self.assertEqual(len(items), 2)
-        self.assertEqual(items[0]["title"], "First Post")
-        self.assertEqual(items[0]["url"], "https://example.com/a?utm_source=x")
-        self.assertEqual(items[0]["summary"], "Hello world")  # HTML 标签已去除
-        self.assertIn("Hello", items[0]["content"])           # content 保留原始正文
-
-    def test_atom_link_href(self):
-        items = parse_rss_text(ATOM_FIXTURE)
-        self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["title"], "Vid")
-        self.assertEqual(items[0]["url"], "https://youtu.be/xyz")
-
-    def test_limit(self):
-        self.assertEqual(len(parse_rss_text(RSS_FIXTURE, limit=1)), 1)
-
-    def test_malformed_xml_returns_empty(self):
-        self.assertEqual(parse_rss_text("<not xml"), [])
-
-    def test_bare_ampersand_recovered(self):
-        # 部分 feed（如 Apple ML）正文有裸 &，不应导致整篇解析失败
-        xml = ('<rss version="2.0"><channel><item>'
-               '<title>Tom & Jerry & AI</title><link>https://e.com/a</link>'
-               '</item></channel></rss>')
-        items = parse_rss_text(xml)
-        self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["title"], "Tom & Jerry & AI")
-
-
-class TestSourceFailure(unittest.TestCase):
-    def test_parse_rss_raises_on_fetch_failure(self):
-        # fetch 返 None(网络/超时/HTTP≥400)→ parse_rss 抛异常,让 run.py 报 ✗,区别于"抓到内容但 0 条"
-        import parsers
-        with mock.patch.object(parsers, "fetch", return_value=None):
-            with self.assertRaises(RuntimeError):
-                parsers.parse_rss({"url": "https://down.example/feed", "limit": 10})
-
-    def test_parse_rss_empty_feed_returns_empty_not_raise(self):
-        # 抓到合法但空的 feed(如 arXiv 周末)→ 返 [] 不抛,显示"抓到 0 条"
-        import parsers
-        empty = '<?xml version="1.0"?><rss><channel><title>x</title></channel></rss>'
-        with mock.patch.object(parsers, "fetch", return_value=empty):
-            self.assertEqual(parsers.parse_rss({"url": "https://e.com/feed"}), [])
-
-
-class TestTweetNoise(unittest.TestCase):
-    def test_tweet_text_keeps_links(self):
-        import fetch_x
-        # 作者分享的链接不丢:无展开地址 → 保留 t.co
-        self.assertIn("t.co/nB032", fetch_x._tweet_text({"text": "下载地址：https://t.co/nB032Ad9KF"}))
-        # 有 urls 展开 → 替换成真实地址(按序);媒体/引用即便有也不删链接
-        out = fetch_x._tweet_text({"text": "Github：https://t.co/aaa https://t.co/bbb",
-                                   "urls": ["https://github.com/x/y"], "media": [{"type": "photo"}],
-                                   "quotedTweet": {"id": "1"}})
-        self.assertIn("github.com/x/y", out)   # 第一个 t.co 展开
-        self.assertIn("t.co/bbb", out)         # 没展开的保留(绝不误删)
-        # API 文本是 HTML 转义的 → unescape
-        self.assertIn("5 < 10", fetch_x._tweet_text({"text": "5 &lt; 10"}))
-
-    def test_is_noise_filters_giveaway_keeps_real(self):
-        import fetch_x
-        # 抽奖/转发求互动噪音 → True(即便含 AI 词)
-        self.assertTrue(fetch_x.is_noise("🎟️抽奖啦！抽 10 个人送《AI 提效实战指南》"))
-        self.assertTrue(fetch_x.is_noise("由于 Grok 拿不到“转发”名单，只能从“评论”或“引用”里面抽，请补一个评论"))
-        # 正常 AI 推 → False
-        self.assertFalse(fetch_x.is_noise("Claude Fable 5 在 agentic 编码上的表现远超 GPT"))
-        self.assertFalse(fetch_x.is_noise("我们对 7 个前沿模型做了 autoresearch 基准测试"))
-
-
-class TestJson(unittest.TestCase):
-    def test_dotted_path_and_url_template(self):
-        items = parse_json_text(JSON_FIXTURE, HF_CFG)
-        self.assertEqual(len(items), 2)
-        self.assertEqual(items[0]["title"], "Cool Paper")
-        self.assertEqual(items[0]["url"], "https://huggingface.co/papers/2606.00001")
-        self.assertEqual(items[0]["summary"], "42 upvotes")
-
-    def test_malformed_json_returns_empty(self):
-        self.assertEqual(parse_json_text("{bad", HF_CFG), [])
-
-
-class TestXiaoyuzhou(unittest.TestCase):
-    def _html(self, podcast):
-        return ('<html><body><script id="__NEXT_DATA__" type="application/json">'
-                + json.dumps({"props": {"pageProps": {"podcast": podcast}}})
-                + "</script></body></html>")
-
-    def test_episodes_to_items(self):
-        html_text = self._html({"title": "测试播客", "episodes": [
-            {"eid": "abc123", "title": "第一集", "description": "<p>内容</p>",
-             "pubDate": "2026-05-23T13:30:00.000Z"},
-        ]})
-        items = parse_xiaoyuzhou_text(html_text)
-        self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["title"], "第一集")
-        self.assertEqual(items[0]["url"], "https://www.xiaoyuzhoufm.com/episode/abc123")
-        self.assertEqual(items[0]["summary"], "内容")          # HTML 标签已去
-        self.assertEqual(items[0]["published_at"], "2026-05-23")  # ISO → 日期
-
-    def test_no_next_data_returns_empty(self):
-        self.assertEqual(parse_xiaoyuzhou_text("<html>nope</html>"), [])
+    def test_keeps_legit_reference_id(self):
+        out = normalize_url("https://e.com/a?reference_id=9&reflink=spam")
+        self.assertIn("reference_id=9", out)
+        self.assertNotIn("reflink", out)
 
 
 class TestContent(unittest.TestCase):
@@ -218,77 +51,14 @@ class TestContent(unittest.TestCase):
         self.assertIn('src="/img/deadbeef.png"', out)
         self.assertNotIn("https://a/b.png", out)
 
-    def test_localize_leaves_relative_src(self):
-        html_in = '<img src="/local.png">'
-        self.assertEqual(content.localize_images(html_in), html_in)
-
-    def test_md_to_html_blocks(self):
-        md = ("Title: T\n\nMarkdown Content:\n"
-              "# H1\n\npara **bold** and [lk](https://x.com)\n\n- a\n- b\n\n"
-              "![alt](https://i/p.png)\n\n> quote")
-        out = content.md_to_html(md)
-        self.assertNotIn("Markdown Content:", out)              # 头部元信息已剥
+    def test_md_to_html_blocks_and_escapes(self):
+        out = content.md_to_html("# H1\n\npara **bold** and [lk](https://x.com)\n\n- a\n\n> q\n\n<script>")
         self.assertIn("<h1>H1</h1>", out)
         self.assertIn("<strong>bold</strong>", out)
         self.assertIn('<a href="https://x.com">lk</a>', out)
         self.assertIn("<li>a</li>", out)
-        self.assertIn('<img src="https://i/p.png"', out)
-        self.assertIn("<blockquote>quote</blockquote>", out)
-
-    def test_md_to_html_escapes_html(self):
-        self.assertIn("&lt;script&gt;", content.md_to_html("a <script> b"))
-
-    def test_extract_article_picks_body_drops_chrome(self):
-        body = "A" * 220  # 够长的正文段(过 200 字正文闸门)
-        html = (f"<html><body><nav>menu links here all over</nav>"
-                f"<article><h2>Heading</h2><p>{body}</p>"
-                f"<p>short</p><script>junk()</script></article>"
-                f"<footer>{'F' * 90}</footer></body></html>")
-        out = content._extract_article(html)
-        self.assertIn(f"<p>{body}</p>", out)       # 长正文段保留
-        self.assertIn("<h2>Heading</h2>", out)     # 小标题保留
-        self.assertNotIn("short", out)             # <60 字短段丢弃
-        self.assertNotIn("menu links", out)        # nav 剥掉
-        self.assertNotIn("junk()", out)            # script 剥掉
-        self.assertNotIn("FFF", out)               # footer 剥掉
-
-    def test_extract_article_drops_boilerplate(self):
-        real = "Real article sentence number one that is long enough to count. " * 4
-        html = (f"<article><p>{real}</p>"
-                f"<p>Sign up for our weekly newsletter to get the latest news delivered.</p>"
-                f"<p>Jane Doe is a freelance contributor for the site and writes about tech.</p>"
-                f"<p>Get an inside look at what it takes to scale and succeed at the event.</p>"
-                f"</article>")
-        out = content._extract_article(html)
-        self.assertIn("Real article sentence", out)
-        self.assertNotIn("newsletter", out)
-        self.assertNotIn("freelance contributor", out)
-        self.assertNotIn("Get an inside look", out)
-
-    def test_extract_article_too_short_returns_empty(self):
-        # 付费墙 stub / 纯导航:正文 <200 字 → 视为没抓到
-        self.assertEqual(content._extract_article("<article><p>" + "x" * 70 + "</p></article>"), "")
-
-    def test_jina_curl_args_adds_auth_when_key_exists(self):
-        with mock.patch.dict(content.os.environ, {"JINA_API_KEY": "jina_test"}, clear=True):
-            args = content._jina_curl_args("https://example.com/a", 15)
-        self.assertIn("-H", args)
-        self.assertIn("Authorization: Bearer jina_test", args)
-
-    def test_jina_curl_args_adds_auth_from_keychain(self):
-        fake = mock.Mock(returncode=0, stdout="jina_keychain\n")
-        with mock.patch.dict(content.os.environ, {"USER": "me"}, clear=True), \
-             mock.patch.object(content.subprocess, "run", return_value=fake):
-            args = content._jina_curl_args("https://example.com/a", 15)
-        self.assertIn("-H", args)
-        self.assertIn("Authorization: Bearer jina_keychain", args)
-
-    def test_jina_curl_args_omits_auth_without_key(self):
-        fake = mock.Mock(returncode=44, stdout="")
-        with mock.patch.dict(content.os.environ, {"USER": "me"}, clear=True), \
-             mock.patch.object(content.subprocess, "run", return_value=fake):
-            args = content._jina_curl_args("https://example.com/a", 15)
-        self.assertNotIn("-H", args)
+        self.assertIn("<blockquote>q</blockquote>", out)
+        self.assertIn("&lt;script&gt;", out)
 
     def test_download_image_accepts_short_timeouts(self):
         old_dist_img = content.DIST_IMG
@@ -297,9 +67,9 @@ class TestContent(unittest.TestCase):
             content.DIST_IMG = Path(td)
             fake = mock.Mock(returncode=0, stdout=fake_png)
             try:
-                with mock.patch.object(content.subprocess, "run", return_value=fake) as run:
+                with mock.patch.object(content.subprocess, "run", return_value=fake) as subprocess_run:
                     self.assertTrue(content._download_image("https://example.com/a.png", max_time=3, timeout=4))
-                args, kwargs = run.call_args
+                args, kwargs = subprocess_run.call_args
                 curl_args = args[0]
                 self.assertEqual(curl_args[curl_args.index("--max-time") + 1], "3")
                 self.assertEqual(kwargs["timeout"], 4)
@@ -307,211 +77,119 @@ class TestContent(unittest.TestCase):
                 content.DIST_IMG = old_dist_img
 
 
-class TestFetchX(unittest.TestCase):
-    def test_download_tweet_image_uses_cache_and_short_timeout(self):
-        old_cache, old_stats, old_deadline = fetch_x._IMG_CACHE, fetch_x._IMG_STATS, fetch_x._IMAGE_DEADLINE
-        fetch_x._IMG_CACHE = {}
-        fetch_x._IMG_STATS = {"attempt": 0, "ok": 0, "fail": 0, "budget_skip": 0, "cache": 0}
-        fetch_x._IMAGE_DEADLINE = None
-        try:
-            with mock.patch.object(fetch_x.content, "_download_image", return_value="/img/a.jpg") as dl:
-                self.assertEqual(fetch_x._download_tweet_image("https://pbs.twimg.com/a.jpg"), "/img/a.jpg")
-                self.assertEqual(fetch_x._download_tweet_image("https://pbs.twimg.com/a.jpg"), "/img/a.jpg")
-            dl.assert_called_once()
-            self.assertEqual(dl.call_args.kwargs["max_time"], fetch_x.IMAGE_MAX_TIME)
-            self.assertEqual(dl.call_args.kwargs["timeout"], fetch_x.IMAGE_TIMEOUT)
-            self.assertEqual(fetch_x._IMG_STATS["cache"], 1)
-        finally:
-            fetch_x._IMG_CACHE, fetch_x._IMG_STATS, fetch_x._IMAGE_DEADLINE = old_cache, old_stats, old_deadline
-
-    def test_duplicate_complete_tweet_skips_expensive_to_item(self):
-        with TemporaryDirectory() as td:
-            root = Path(td)
-            (root / "config").mkdir()
-            (root / "config" / "sources.json").write_text(json.dumps({"sources": [{
-                "id": "x-test",
-                "source_label": "X",
-                "category": "推文",
-                "parser": "browser",
-                "fetch": "twitter-cli",
-                "url": "https://x.com/i/lists/1",
-            }]}), encoding="utf-8")
-            conn = sqlite3.connect(":memory:")
-            conn.row_factory = sqlite3.Row
-            init_db(conn)
-            source = {"id": "x-test", "source_label": "X", "category": "推文"}
-            url = "https://x.com/alice/status/1"
-            insert_items([{"title": "@alice：AI model", "url": url,
-                           "tweet_meta": json.dumps({"avatar": "/img/a.jpg", "quote": None})}], source, conn)
-            tweet = {"id": "1", "text": "AI model", "createdAtISO": datetime.now(timezone.utc).isoformat(),
-                     "author": {"screenName": "alice", "profileImageUrl": "https://pbs.twimg.com/a.jpg"}}
-            with mock.patch.object(fetch_x, "ROOT", root), \
-                 mock.patch.object(fetch_x, "_conn", return_value=conn), \
-                 mock.patch.object(fetch_x, "fetch_list", return_value=[tweet]), \
-                 mock.patch.object(fetch_x, "to_item", side_effect=AssertionError("to_item should not run")), \
-                 mock.patch.object(sys, "argv", ["fetch_x.py", "x-test"]), \
-                 contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(fetch_x.main(), 0)
-
-    def test_quote_detail_temporary_failure_stays_retryable(self):
-        old_stats, old_deadline = fetch_x._QUOTE_STATS, fetch_x._QUOTE_DEADLINE
-        fetch_x._QUOTE_STATS = {"attempt": 0, "ok": 0, "budget_skip": 0}
-        fetch_x._QUOTE_DEADLINE = None
-        tweet = {"id": "1", "text": "AI model", "createdAtISO": datetime.now(timezone.utc).isoformat(),
-                 "author": {"screenName": "alice"},
-                 "quotedTweet": {"id": "2", "text": "quoted AI text",
-                                  "author": {"name": "Bob", "screenName": "bob"}}}
-        failed = mock.Mock(returncode=1, stdout="rate limited")
-        try:
-            with mock.patch.object(fetch_x.subprocess, "run", return_value=failed):
-                item = fetch_x.to_item(tweet)
-        finally:
-            fetch_x._QUOTE_STATS, fetch_x._QUOTE_DEADLINE = old_stats, old_deadline
-        meta = json.loads(item["tweet_meta"])
-        self.assertEqual(meta["quote"]["text"], "quoted AI text")
-        self.assertFalse(meta["quote"]["detail_checked"])
-
-    def test_merge_existing_media_preserves_quote_translation(self):
-        row = {"content_html": "", "tweet_meta": json.dumps({
-            "avatar": "",
-            "quote": {"text": "old", "text_zh": "旧译文", "image": "", "avatar": ""}
-        }, ensure_ascii=False)}
-        item = {"content_html": '<img src="/img/p.png">', "tweet_meta": json.dumps({
-            "avatar": "/img/a.jpg",
-            "quote": {"text": "new", "text_zh": "", "image": "/img/q.png", "avatar": "/img/qa.jpg",
-                      "detail_checked": True}
-        }, ensure_ascii=False)}
-        html, meta, changed = fetch_x._merge_existing_media(row, item)
-        merged = json.loads(meta)
-        self.assertTrue(changed)
-        self.assertIn("/img/p.png", html)
-        self.assertEqual(merged["quote"]["text_zh"], "旧译文")
-        self.assertEqual(merged["quote"]["image"], "/img/q.png")
-
-
-class TestBrowserPolicy(unittest.TestCase):
-    def test_browser_origins_include_apex_and_www_redirect_variants(self):
-        old_root = check_browser_policy.ROOT
-        with TemporaryDirectory() as td:
-            root = Path(td) / "radar"
-            (root / "config").mkdir(parents=True)
-            (root / "config" / "sources.json").write_text(json.dumps({"sources": [
-                {
-                    "id": "apex",
-                    "source_label": "Apex",
-                    "category": "产品",
-                    "parser": "browser",
-                    "url": "https://example.com/blog",
-                    "enabled": True,
-                },
-                {
-                    "id": "www",
-                    "source_label": "WWW",
-                    "category": "产品",
-                    "parser": "browser",
-                    "url": "https://www.example.org/news",
-                    "enabled": True,
-                },
-            ]}), encoding="utf-8")
-            check_browser_policy.ROOT = root
-            try:
-                origins = set(check_browser_policy.browser_origins())
-            finally:
-                check_browser_policy.ROOT = old_root
-        self.assertIn("https://example.com", origins)
-        self.assertIn("https://www.example.com", origins)
-        self.assertIn("https://example.org", origins)
-        self.assertIn("https://www.example.org", origins)
-
-    def test_update_origins_block_moves_required_to_allowed(self):
-        text = """[origins]
-denied = [
-    "https://a.example",
-    "https://b.example",
-]
-
-[other]
-x = 1
-"""
-        out = check_browser_policy.update_origins_block(
-            text,
-            {"https://a.example", "https://c.example"},
-            {"https://b.example"},
-        )
-        self.assertIn('[other]\nx = 1', out)
-        self.assertIn('allowed = [\n    "https://a.example",\n    "https://c.example",\n]', out)
-        self.assertIn('denied = [\n    "https://b.example",\n]', out)
-        self.assertNotIn('"https://a.example",\n    "https://b.example"', out)
-
-    def test_default_session_prefers_current_codex_thread_id(self):
-        old_sessions = check_browser_policy.SESSIONS
-        with TemporaryDirectory() as td:
-            check_browser_policy.SESSIONS = Path(td)
-            latest = Path(td) / "latest.toml"
-            current = Path(td) / "thread-123.toml"
-            latest.write_text("[origins]\ndenied = []\n", encoding="utf-8")
-            current.write_text("[origins]\nallowed = []\n", encoding="utf-8")
-            with mock.patch.dict(check_browser_policy.os.environ, {"CODEX_THREAD_ID": "thread-123"}):
-                self.assertEqual(check_browser_policy.default_session(), current)
-        check_browser_policy.SESSIONS = old_sessions
-
-    def test_fix_can_create_current_thread_session(self):
-        old_root = check_browser_policy.ROOT
-        old_sessions = check_browser_policy.SESSIONS
-        with TemporaryDirectory() as td:
-            root = Path(td) / "radar"
-            sessions = Path(td) / "sessions"
-            (root / "config").mkdir(parents=True)
-            (root / "config" / "sources.json").write_text(json.dumps({"sources": [{
-                "id": "site",
-                "source_label": "Site",
-                "category": "产品",
-                "parser": "browser",
-                "url": "https://example.com/blog",
-                "enabled": True,
-            }]}), encoding="utf-8")
-            check_browser_policy.ROOT = root
-            check_browser_policy.SESSIONS = sessions
-            with mock.patch.dict(check_browser_policy.os.environ, {"CODEX_THREAD_ID": "new-thread"}), \
-                 mock.patch.object(sys, "argv", ["check_browser_policy.py", "--fix"]), \
-                 contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(check_browser_policy.main(), 0)
-            created = sessions / "new-thread.toml"
-            self.assertTrue(created.exists())
-            allowed, denied = check_browser_policy.load_origins(created)
-            self.assertIn("https://example.com", allowed)
-            self.assertNotIn("https://example.com", denied)
-        check_browser_policy.ROOT = old_root
-        check_browser_policy.SESSIONS = old_sessions
-
-
-class TestRetention(unittest.TestCase):
+class TestStore(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.row_factory = sqlite3.Row
         init_db(self.conn)
-        self.source = {"id": "s", "source_label": "S", "category": "Newsletter"}
+        self.source = {"id": "s", "source_label": "S", "category": "文章"}
 
     def tearDown(self):
         self.conn.close()
 
-    def test_hash_exists(self):
-        insert_items([{"url": "https://e.com/x", "title": "x"}], self.source, self.conn)
-        self.assertTrue(hash_exists(url_hash("https://e.com/x"), self.conn))
-        self.assertFalse(hash_exists(url_hash("https://e.com/y"), self.conn))
+    def test_insert_dedups_by_normalized_url(self):
+        self.assertEqual(insert_items([{"url": "https://example.com/a?utm_source=x", "title": "A"}], self.source, self.conn), 1)
+        self.assertEqual(insert_items([{"url": "https://example.com/a", "title": "A again"}], self.source, self.conn), 0)
+        self.assertEqual(len(all_items(self.conn)), 1)
 
-    def test_purge_old_keeps_recent(self):
-        insert_items([{"url": "https://e.com/new", "title": "new"}], self.source, self.conn)
+    def test_purge_old_keeps_curated_content(self):
         old = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
         self.conn.execute(
-            "INSERT INTO items (hash,source_id,source_label,category,title,url,fetched_at) VALUES (?,?,?,?,?,?,?)",
-            ("oldhash", "s", "S", "Newsletter", "old", "https://e.com/old", old),
+            """INSERT INTO items
+               (hash,source_id,source_label,category,title,url,published_at,fetched_at,translation_md)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            ("deep", "s", "S", "文章", "deep", "https://e.com/deep", old, old, "译文"),
+        )
+        self.conn.execute(
+            """INSERT INTO items
+               (hash,source_id,source_label,category,title,url,published_at,fetched_at)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            ("old", "s", "S", "文章", "old", "https://e.com/old", old, old),
         )
         self.conn.commit()
-        self.assertEqual(len(all_items(self.conn)), 2)
         self.assertEqual(purge_old(30, self.conn), 1)
-        rows = all_items(self.conn)
-        self.assertEqual([r["title"] for r in rows], ["new"])
+        self.assertEqual([r["title"] for r in all_items(self.conn)], ["deep"])
+
+
+class TestRun(unittest.TestCase):
+    def test_fetch_flag_is_gone(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            run.parse_args(["--fetch"])
+
+    def test_render_current_filters_to_curated_items(self):
+        curated = {"hash": "h1", "source_id": "user-curated", "source_label": "用户精选",
+                   "title": "curated", "url": "https://e.com/curated", "content_html": ""}
+        raw = {"hash": "h2", "source_id": "rss", "source_label": "RSS",
+               "title": "raw", "url": "https://e.com/raw", "content_html": ""}
+        with mock.patch.object(run, "purge_old", return_value=0), \
+             mock.patch.object(run, "all_items", return_value=[curated, raw]), \
+             mock.patch.object(run.content, "gc_images", return_value=0), \
+             mock.patch.object(run, "render_site", return_value=Path("dist")) as render_site, \
+             contextlib.redirect_stdout(io.StringIO()):
+            run.render_current()
+        self.assertEqual(render_site.call_args.args[0], [curated])
+
+
+class TestPublishItem(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        init_db(self.conn)
+        self.tmp = TemporaryDirectory()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _md(self, name, text):
+        p = Path(self.tmp.name) / name
+        p.write_text(text, encoding="utf-8")
+        return str(p)
+
+    def test_publish_translation_creates_curated_item(self):
+        md = self._md("zh.md", "# 中文标题\n\n正文")
+        args = publish_item.parse_args([
+            "--url", "https://example.com/post?utm_source=x",
+            "--kind", "article",
+            "--translation", md,
+        ])
+        with contextlib.redirect_stdout(io.StringIO()):
+            h = publish_item.publish(args, self.conn)
+        row = self.conn.execute("SELECT * FROM items WHERE hash=?", (h,)).fetchone()
+        self.assertEqual(row["source_id"], "user-curated")
+        self.assertEqual(row["source_label"], "用户精选")
+        self.assertEqual(row["category"], "文章")
+        self.assertEqual(row["title"], "中文标题")
+        self.assertEqual(row["translation_md"], "# 中文标题\n\n正文")
+        self.assertEqual(row["published_at"], "")
+
+    def test_publish_summary_updates_existing_item(self):
+        insert_items([{"url": "https://youtu.be/rzVhPTSNWnE", "title": "Old"}],
+                     {"id": "yt", "source_label": "YouTube", "category": "视频"}, self.conn)
+        md = self._md("sum.md", "# 新总结\n\n要点")
+        args = publish_item.parse_args([
+            "--url", "https://youtu.be/rzVhPTSNWnE",
+            "--title", "New",
+            "--kind", "video",
+            "--summary", md,
+        ])
+        with contextlib.redirect_stdout(io.StringIO()):
+            h = publish_item.publish(args, self.conn)
+        row = self.conn.execute("SELECT * FROM items WHERE hash=?", (h,)).fetchone()
+        self.assertEqual(row["title"], "New")
+        self.assertEqual(row["source_label"], "用户精选")
+        self.assertEqual(row["summary_md"], "# 新总结\n\n要点")
+
+    def test_publish_rejects_obsidian_embeds(self):
+        md = self._md("bad.md", "# T\n\n![[attachments/a.png]]")
+        args = publish_item.parse_args([
+            "--url", "https://example.com/post",
+            "--title", "T",
+            "--kind", "article",
+            "--translation", md,
+        ])
+        with self.assertRaises(ValueError):
+            publish_item.publish(args, self.conn)
 
 
 class TestRender(unittest.TestCase):
@@ -526,129 +204,59 @@ class TestRender(unittest.TestCase):
         render._img_have_cache[0] = None
         self._tmp_img_dir.cleanup()
 
-    def test_card_detail_links_to_page(self):
-        card = render._card({"hash": "h1", "title": "T", "source_id": "s", "category": "Newsletter"}, "detail")
-        self.assertIn('href="/item/h1.html"', card)
-        self.assertNotIn("target=", card)
+    def test_youtube_embed_uses_direct_hq_cover(self):
+        html = render._youtube_embed("https://www.youtube.com/watch?v=rzVhPTSNWnE")
+        self.assertIn('data-yt="rzVhPTSNWnE"', html)
+        self.assertIn("https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg", html)
+        self.assertNotIn("/thumb/", html)
 
-    def test_card_link_goes_external(self):
-        card = render._card({"hash": "h1", "title": "T", "url": "https://e.com/x", "category": "播客"}, "link")
-        self.assertIn('href="https://e.com/x"', card)
-        self.assertIn('target="_blank"', card)
-        self.assertNotIn("/item/", card)
-
-    def test_card_tweet_avatar_name_quote(self):
-        import json as _json
-        import content
-        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
-        (content.DIST_IMG / "q-img.png").write_bytes(b"x")   # 引用配图文件存在 → _lazy_imgs 保留
-        (content.DIST_IMG / "q-av.jpg").write_bytes(b"x")    # 引用作者头像文件存在
-        render._img_have_cache[0] = None
-        item = {"hash": "tw1", "category": "推文", "source_label": "X · 关注",
-                "title": "@blackanger：基于决策阶梯，给 AI 一段 prompt", "title_zh": "",
-                "tweet_meta": _json.dumps({"name": "AlexZ", "handle": "blackanger", "avatar": "/img/av.jpg",
-                                           "verified": True, "rt": "",
-                                           "quote": {"name": "Tech with Mak", "handle": "techNmak",
-                                                     "text": "A dev got so frustrated",
-                                                     "text_zh": "一位开发者非常沮丧",
-                                                     "image": "/img/q-img.png",
-                                                     "avatar": "/img/q-av.jpg"}}, ensure_ascii=False)}
-        try:
-            card = render._card(item, "link")
-        finally:
-            (content.DIST_IMG / "q-img.png").unlink(missing_ok=True)
-            (content.DIST_IMG / "q-av.jpg").unlink(missing_ok=True)
-            render._img_have_cache[0] = None
-        self.assertIn('src="/img/av.jpg"', card)        # 真头像
-        self.assertIn("AlexZ", card)                     # 作者名
-        self.assertIn("tw-vf", card)                     # 认证徽章
-        self.assertIn('it-title">基于决策阶梯', card)    # 正文(it-title)已去 "@handle：" 前缀,直接从文本开头
-        self.assertNotIn('it-title">@blackanger', card)  # 正文不再以 @handle 开头(data-text 搜索域仍保留原文)
-        self.assertIn("Tech with Mak", card)             # 引用作者
-        self.assertIn("A dev got so frustrated", card)   # 引用文本
-        self.assertIn("一位开发者非常沮丧", card)         # 引用中译(text_zh)显示在英文下
-        self.assertIn("tw-q-zh", card)                   # 中译用独立样式行
-        self.assertIn('class="tw-q-av"', card)           # 引用作者头像(二次抓补的)
-        self.assertIn('src="/img/q-img.png"', card)      # 引用配图(父推不给,二次抓补)
-        self.assertIn("tw-q-media", card)                # 引用配图容器
-
-    def test_card_search_blob_has_english_and_chinese(self):
-        # 显示中文标题,但搜索域 data-text 须中英都含——否则英文关键词搜不到
-        card = render._card({"hash": "h", "category": "资讯", "source_label": "S",
-                             "title": "English Original Title", "title_zh": "中文标题",
-                             "summary": "english summary text", "summary_zh": "中文摘要"})
-        m = re.search(r'data-text="([^"]*)"', card)
-        self.assertIn("english original title", m.group(1))   # 英文原标题在搜索域
-        self.assertIn("中文标题", m.group(1))                  # 中译也在
-
-    def test_lazy_imgs_adds_loading_and_drops_missing(self):
-        import content
-        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
-        (content.DIST_IMG / "lz-a.png").write_bytes(b"x")   # a 存在 → 保留+lazy
-        render._img_have_cache[0] = None                    # 清渲染缓存,让其重读
-        try:
-            out = render._lazy_imgs('<p><img src="/img/lz-a.png"> <img src="/img/lz-gone.png"></p>')
-            self.assertIn('<img loading="lazy" src="/img/lz-a.png"', out)  # 存在的:加 lazy
-            self.assertNotIn("lz-gone.png", out)             # 文件缺失的:整个 <img> 丢掉(无破图)
-            self.assertEqual(out.count("<img"), 1)
-        finally:
-            (content.DIST_IMG / "lz-a.png").unlink(missing_ok=True)
-            render._img_have_cache[0] = None
-
-    def test_has_zh_deep_and_card_anchor(self):
-        self.assertTrue(render._has_zh_deep({"translation_md": "译文"}))
-        self.assertTrue(render._has_zh_deep({"summary_md": "总结"}))
-        self.assertTrue(render._has_zh_deep({"video_url": "https://www.bilibili.com/video/BV1x"}))  # B站译制
-        self.assertFalse(render._has_zh_deep({"translation_md": "", "summary_md": "", "video_url": ""}))
-        self.assertFalse(render._has_zh_deep({}))
-        # anchor 拼进详情 href(精读页深链直接开对应 tab)
-        card = render._card({"hash": "h9", "category": "资讯", "source_label": "S",
-                             "title": "T"}, "detail", "#zh")
-        self.assertIn('href="/item/h9.html#zh"', card)
-
-    def test_tabs_no_rewrite(self):
-        panel, _outline = render._tabs({"content_html": "<p>x</p>"})  # _tabs 返回 (html, 大纲)
-        self.assertNotIn("乔木风格重写", panel)
-        self.assertIn("原文", panel)
+    def test_tabs_translation_outline(self):
+        panel, outline = render._tabs({"content_html": "<p>x</p>", "translation_md": "## 中文段落\n\n正文"})
         self.assertIn("中文翻译", panel)
+        self.assertIn("中文段落", panel)
+        self.assertEqual(outline[0][2], "中文段落")
 
-    def test_youtube_embed(self):
-        for u in ("https://www.youtube.com/watch?v=rzVhPTSNWnE",
-                  "https://youtu.be/rzVhPTSNWnE",
-                  "https://www.youtube.com/shorts/rzVhPTSNWnE"):
-            e = render._youtube_embed(u)
-            self.assertIn('data-yt="rzVhPTSNWnE"', e)            # 门面携带 video id
-            self.assertIn("i.ytimg.com/vi/rzVhPTSNWnE", e)       # 缩略图封面
+    def test_render_site_outputs_only_overview_and_details(self):
+        item = {
+            "hash": "h1",
+            "source_id": "user-curated",
+            "source_label": "用户精选",
+            "category": "文章",
+            "title": "English",
+            "title_zh": "中文标题",
+            "summary": "",
+            "summary_zh": "中文摘要",
+            "url": "https://example.com/a",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": "",
+            "content_html": "<p>original</p>",
+            "translation_md": "## 中文段落\n\n正文",
+            "summary_md": "",
+            "video_url": "",
+        }
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+            index = (out / "index.html").read_text(encoding="utf-8")
+            detail = (out / "item" / "h1.html").read_text(encoding="utf-8")
+            self.assertTrue((out / "index.html").exists())
+            self.assertTrue((out / "item" / "h1.html").exists())
+            self.assertFalse((out / "feed.html").exists())
+            self.assertFalse((out / "reads.html").exists())
+            self.assertIn("data-card", index)
+            self.assertNotIn("reads.html", index)
+            self.assertIn('href="/"', detail)
+            self.assertIn("← 总览", detail)
 
-    def test_youtube_embed_empty_for_non_youtube(self):
-        self.assertEqual(render._youtube_embed("https://example.com/x"), "")
-
-
-class TestDedup(unittest.TestCase):
-    def setUp(self):
-        self.conn = sqlite3.connect(":memory:")
-        self.conn.row_factory = sqlite3.Row
-        init_db(self.conn)
-        self.source = {"id": "s1", "source_label": "Src", "category": "Newsletter"}
-
-    def tearDown(self):
-        self.conn.close()
-
-    def test_same_url_dedup(self):
-        rows = [{"url": "https://example.com/a?utm_source=x", "title": "A"}]
-        self.assertEqual(insert_items(rows, self.source, self.conn), 1)
-        # 同一篇换了 utm 参数，应判为重复
-        rows2 = [{"url": "https://example.com/a", "title": "A again"}]
-        self.assertEqual(insert_items(rows2, self.source, self.conn), 0)
-        self.assertEqual(len(all_items(self.conn)), 1)
-
-    def test_distinct_urls(self):
-        rows = [
-            {"url": "https://example.com/a", "title": "A"},
-            {"url": "https://example.com/b", "title": "B"},
-        ]
-        self.assertEqual(insert_items(rows, self.source, self.conn), 2)
-        self.assertEqual(len(all_items(self.conn)), 2)
+    def test_card_cover_uses_article_contain_and_video_cover(self):
+        self.assertEqual(
+            render._item_cover({"url": "https://www.youtube.com/watch?v=rzVhPTSNWnE"}),
+            "https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg",
+        )
+        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
+        (content.DIST_IMG / "cover.png").write_bytes(b"x")
+        render._img_have_cache[0] = None
+        self.assertEqual(render._item_cover({"translation_md": "![a](/img/cover.png)"}), "/img/cover.png")
 
 
 if __name__ == "__main__":
