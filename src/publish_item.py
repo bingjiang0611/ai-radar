@@ -21,11 +21,15 @@ import run  # noqa: E402
 from store import _conn, init_db, insert_items, url_hash  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+DIST_IMG = ROOT / "dist" / "img"
 KIND_TO_CATEGORY = {
     "article": "文章",
     "video": "视频",
     "podcast": "播客",
 }
+_X_STATUS_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_]{1,20}/status(?:es)?/\d+")
+_MD_IMG = re.compile(r"!\[[^\]]*]\(([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\)")
+_IMG_SRC = re.compile(r"""(?i)<img[^>]+src=["']([^"']+)["']""")
 
 
 def _read_md(path):
@@ -68,6 +72,64 @@ def _stored_bili_url(bili):
     return bili + (("&" if "?" in bili else "?") + "cid=" + cid if cid else "")
 
 
+def _tweet_meta_with_cover(row, cover):
+    if not cover:
+        return ""
+    if not cover.startswith(("/img/", "http://", "https://")):
+        raise ValueError("--cover 必须是 /img/... 或 http(s) 图片 URL")
+    if cover.startswith("/img/") and not (DIST_IMG / cover.removeprefix("/img/")).exists():
+        raise ValueError(f"--cover 指向的站内图片不存在: {cover}")
+    try:
+        meta = json.loads((row["tweet_meta"] if row else "") or "{}")
+    except json.JSONDecodeError:
+        meta = {}
+    meta["cover"] = cover
+    return json.dumps(meta, ensure_ascii=False, sort_keys=True)
+
+
+def _row_cover(row):
+    if not row:
+        return ""
+    try:
+        return (json.loads(row["tweet_meta"] or "{}").get("cover") or "").strip()
+    except json.JSONDecodeError:
+        return ""
+
+
+def _local_cover_exists(src):
+    src = (src or "").strip()
+    return bool(src.startswith("/img/") and (DIST_IMG / src.removeprefix("/img/")).exists())
+
+
+def _has_embedded_cover(*blobs):
+    for blob in blobs:
+        for m in _MD_IMG.finditer(blob or ""):
+            if _local_cover_exists((m.group(1) or "").strip("<>")):
+                return True
+        for m in _IMG_SRC.finditer(blob or ""):
+            if _local_cover_exists(m.group(1) or ""):
+                return True
+    return False
+
+
+def _validate_x_video_cover(args, row, translation_md, summary_md, content_md):
+    if args.kind != "video" or not _X_STATUS_RE.match(args.url or ""):
+        return
+    if args.cover:
+        if not args.cover.startswith("/img/"):
+            raise ValueError("X 视频封面必须先落到 dist/img/，然后用 --cover /img/... 发布")
+        _tweet_meta_with_cover(row, args.cover)
+        return
+    if _local_cover_exists(_row_cover(row)):
+        return
+    row_blobs = []
+    if row:
+        row_blobs = [row["translation_md"] or "", row["summary_md"] or "", row["content_html"] or ""]
+    if _has_embedded_cover(translation_md, summary_md, content_md, *row_blobs):
+        return
+    raise ValueError("X 视频必须提供真实封面：先从 tweet-result 的 video.poster 下载到 dist/img/，再传 --cover /img/...")
+
+
 def publish(args, conn=None):
     translation_md = _read_md(args.translation)
     summary_md = _read_md(args.summary)
@@ -82,6 +144,7 @@ def publish(args, conn=None):
         row = _row_for_url(c, args.url)
         category = KIND_TO_CATEGORY[args.kind]
         title = args.title or args.title_zh or _title_from_md(translation_md) or _title_from_md(summary_md)
+        _validate_x_video_cover(args, row, translation_md, summary_md, content_md)
         if row is None:
             if not title:
                 raise ValueError("新条目需要 --title；或在 markdown 第一行提供 # 标题")
@@ -117,6 +180,8 @@ def publish(args, conn=None):
             updates["video_url"] = bili
         if content_md:
             updates["content_html"] = content.process(content.md_to_html(content_md))
+        if args.cover:
+            updates["tweet_meta"] = _tweet_meta_with_cover(row, args.cover)
 
         sets = ", ".join(f"{k}=?" for k in updates)
         c.execute(f"UPDATE items SET {sets} WHERE hash=?", [*updates.values(), row["hash"]])
@@ -142,6 +207,13 @@ def validate_dist(item_hash):
         raise RuntimeError("首页没有出现本次发布条目")
     if not detail.exists() or detail.stat().st_size == 0:
         raise RuntimeError(f"详情页未生成: dist/item/{item_hash}.html")
+    detail_text = detail.read_text(encoding="utf-8", errors="replace")
+    card = re.search(
+        rf'<a\b[^>]*href="/item/{re.escape(item_hash)}\.html#[^"]+"[\s\S]*?</a>',
+        text,
+    )
+    if card and "twitter-tweet" in detail_text and "has-img" not in card.group(0):
+        raise RuntimeError("X 视频首页卡片缺封面: 渲染成了 poster fallback")
 
 
 def deploy():
@@ -163,6 +235,7 @@ def parse_args(argv=None):
     p.add_argument("--summary", help="视频/播客/文章中文总结 markdown")
     p.add_argument("--bili", default="", help="B站译制视频 URL")
     p.add_argument("--content", help="可选：原文/简介 markdown，渲染到原文 tab")
+    p.add_argument("--cover", default="", help="可选：卡片封面 URL；支持 /img/... 或 http(s)")
     p.add_argument("--summary-text", default="", help="可选：卡片摘要")
     p.add_argument("--summary-zh", action="store_true", help="把 --summary-text 写入中文摘要字段")
     p.add_argument("--source-id", default="user-curated")

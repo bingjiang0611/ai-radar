@@ -4,8 +4,10 @@ The public surface is intentionally small: overview cards plus item detail pages
 """
 
 import html
+import json
 import re
 import shutil
+import struct
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from content import md_to_html  # 译文 translation_md(markdown)→ HTML
 
 # 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
+_X_STATUS_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,20})/status(?:es)?/(\d+)")
 
 DIST = Path(__file__).resolve().parent.parent / "dist"
 
@@ -91,7 +94,8 @@ _BASE_CSS = """
   --serif:'Newsreader','Iowan Old Style','Source Serif 4',Charter,Georgia,'Songti SC',serif;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',system-ui,sans-serif;
   --mono:ui-monospace,'SF Mono','JetBrains Mono','Menlo',monospace;
-  --maxw:1080px;--doc-size:18.5px;--doc-maxw:680px;
+  --maxw:1080px;--doc-size:18.5px;--doc-maxw:820px;--outline-w:200px;--reader-gap:60px;--reader-pad:48px;
+  --reader-maxw:calc(var(--doc-maxw) + var(--outline-w) + var(--reader-gap) + var(--reader-pad));
 }
 /* sepia 阅读底(详情页用,localStorage 持久化) */
 [data-canvas="sepia"]{
@@ -118,6 +122,15 @@ body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px
 a{color:inherit;text-decoration:none}
 img{max-width:100%}
 ::selection{background:var(--accent-soft);color:var(--accent-2)}
+/* 键盘可达性:仅键盘聚焦时显示焦点环(鼠标点击不触发),outline 不受祖先 overflow 裁剪 */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+a:focus-visible,button:focus-visible,input:focus-visible,.art-card:focus-visible,.pick-banner:focus-visible,.tab:focus-visible,.chap:focus-visible,.outline a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 尊重系统"减少动态效果":关掉过渡/动画/平滑滚动 */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+  html{scroll-behavior:auto}
+  .art-card:hover,.pick-banner:hover{transform:none}
+}
 .c-research{--cat:var(--c-research)}.c-product{--cat:var(--c-product)}.c-newsletter{--cat:var(--c-newsletter)}
 .c-news{--cat:var(--c-news)}.c-paper{--cat:var(--c-paper)}.c-podcast{--cat:var(--c-podcast)}
 .c-video{--cat:var(--c-video)}.c-tweet{--cat:var(--c-tweet)}
@@ -159,65 +172,71 @@ img{max-width:100%}
 _HOME_CSS = """
 .wrap{max-width:var(--maxw);margin:0 auto;padding:30px 24px 56px}
 .home-hero{padding:42px 0 30px;max-width:820px}
-.home-eyebrow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:0;text-transform:uppercase;color:var(--accent-2);margin-bottom:18px}
+.home-eyebrow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);margin-bottom:18px}
 .home-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
 .home-title{font-family:var(--sans);font-weight:760;font-size:56px;line-height:1.04;letter-spacing:0;text-wrap:balance}
 .home-title .em{color:var(--accent-2)}
 .home-tagline{margin-top:14px;color:var(--muted);font-size:15px;line-height:1.55}
 .sec{margin-bottom:34px}
 .sec-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
-.sec-k{font-family:var(--mono);font-size:11px;font-weight:650;letter-spacing:0;text-transform:uppercase;color:var(--muted)}
+.sec-k{font-family:var(--mono);font-size:11px;font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .sec-more{font-family:var(--mono);font-size:11px;color:var(--accent-2)}
-.pick-banner{position:relative;display:grid;grid-template-rows:minmax(280px,38vw) auto;border-radius:8px;overflow:hidden;background:oklch(16% 0.018 70);color:#fff;border:1px solid color-mix(in oklch,var(--cat,var(--accent)) 30%,var(--border));box-shadow:var(--shadow)}
-.pick-banner::after{content:attr(data-word);position:absolute;right:28px;top:18px;font-family:var(--mono);font-weight:800;font-size:76px;line-height:1;letter-spacing:0;color:oklch(0% 0 0 / .2);mix-blend-mode:multiply;pointer-events:none}
-.pick-cover{position:relative;min-height:0;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 22%,#fff),#f8fafc);background-size:cover;background-position:center;overflow:hidden}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 30px}
+.fchip{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:6px 14px;cursor:pointer;transition:.15s;white-space:nowrap}
+.fchip:hover{color:var(--fg);border-color:var(--border-2)}
+.fchip.on{color:#fff;background:oklch(52% 0.17 256);border-color:oklch(52% 0.17 256)}
+.pick-banner{position:relative;display:grid;grid-template-rows:minmax(280px,38vw) auto;border-radius:8px;overflow:hidden;background:var(--surface);color:var(--fg);border:1px solid var(--border);box-shadow:var(--shadow);transition:border-color .16s ease,box-shadow .16s ease}
+.pick-banner.fit-wide{grid-template-rows:auto auto}
+.pick-banner:hover{border-color:var(--accent-line);box-shadow:0 16px 40px -22px color-mix(in oklch,var(--accent) 42%,transparent)}
+.pick-banner::after{content:attr(data-word);position:absolute;right:28px;top:18px;font-family:var(--mono);font-weight:800;font-size:76px;line-height:1;letter-spacing:0;color:color-mix(in oklch,var(--cat,var(--accent)) 22%,transparent);pointer-events:none;z-index:1}
+.pick-cover{position:relative;min-height:0;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 18%,var(--surface-2)),var(--inset));background-size:cover;background-position:center;overflow:hidden}
 .pick-cover.has-img{background-image:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08)),var(--cover-img)}
-.pick-cover.fit-contain.has-img{background-color:#f8fafc;background-size:auto,contain;background-repeat:no-repeat;background-position:center}
-.pick-cover.poster{display:flex;align-items:flex-end;padding:28px}
-.pick-body{padding:30px 38px 34px;background:linear-gradient(180deg,oklch(18% 0.018 70),oklch(14% 0.016 70));border-top:1px solid oklch(100% 0 0 / .09)}
-.pick-meta,.art-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:color-mix(in oklch,currentColor 72%,transparent)}
-.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:oklch(100% 0 0 / .12);border:1px solid oklch(100% 0 0 / .24);color:inherit}
-.pill.strong{background:color-mix(in oklch,var(--cat,var(--accent)) 28%,transparent);border-color:color-mix(in oklch,var(--cat,var(--accent)) 55%,transparent);color:#fff}
-.pick-title{font-family:var(--sans);font-weight:760;font-size:34px;line-height:1.18;letter-spacing:0;max-width:820px;margin:20px 0 10px;text-wrap:balance}
-.pick-dek{max-width:820px;color:oklch(88% 0.012 80 / .78);font-size:15.5px;line-height:1.58}
-.pick-foot{margin-top:18px;font-family:var(--mono);font-size:11.5px;color:oklch(90% 0.01 230 / .7)}
+.pick-cover.fit-contain.has-img{background-color:var(--inset);background-size:auto,contain;background-repeat:no-repeat;background-position:center}
+.pick-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4);background-size:auto,cover}
+.pick-cover.poster{display:flex;align-items:flex-end;padding:28px;background:radial-gradient(130% 120% at 86% 8%,color-mix(in oklch,var(--cat,var(--accent)) 22%,var(--surface-2)),var(--inset)),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in oklch,var(--fg) 4%,transparent) 47px 48px)}
+.pick-body{padding:30px 38px 34px;background:var(--surface);border-top:1px solid var(--border)}
+.pick-meta,.art-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--fg-2)}
+.pill.strong{background:color-mix(in oklch,var(--cat,var(--accent)) 15%,var(--surface));border-color:color-mix(in oklch,var(--cat,var(--accent)) 42%,transparent);color:var(--cat,var(--accent))}
+.pick-title{font-family:var(--sans);font-weight:760;font-size:34px;line-height:1.18;letter-spacing:0;max-width:820px;margin:20px 0 10px;text-wrap:balance;color:var(--fg)}
+.pick-dek{max-width:820px;color:var(--muted);font-size:15.5px;line-height:1.58}
+.pick-foot{margin-top:18px;font-family:var(--mono);font-size:11.5px;color:var(--faint)}
 .art-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .art-grid.single{grid-template-columns:1fr}
 .art-grid.single .art-card{display:grid;grid-template-columns:minmax(260px,42%) minmax(0,1fr)}
 .art-grid.single .card-cover{height:100%;min-height:260px;aspect-ratio:auto}
 .art-grid.single .card-body{min-height:260px}
-.art-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid color-mix(in oklch,var(--cat,var(--accent)) 24%,var(--border));border-radius:8px;background:oklch(16% 0.018 70);color:#fff;box-shadow:var(--shadow);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
-.art-card:hover{transform:translateY(-2px);border-color:var(--accent-line);box-shadow:0 14px 36px -20px color-mix(in oklch,var(--cat,var(--accent)) 45%,black)}
-.card-cover{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 22%,#fff),#f8fafc);overflow:hidden}
+.art-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--fg);box-shadow:var(--shadow);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.art-card:hover{transform:translateY(-2px);border-color:var(--accent-line);box-shadow:0 14px 36px -20px color-mix(in oklch,var(--accent) 42%,transparent)}
+.card-cover{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 18%,var(--surface-2)),var(--inset));overflow:hidden}
 .card-cover.has-img{background-image:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08)),var(--cover-img);background-size:cover;background-position:center}
-.card-cover.fit-contain.has-img{background-color:#f8fafc;background-size:auto,contain;background-repeat:no-repeat;background-position:center}
-.card-cover.poster{display:flex;align-items:flex-end;padding:18px}
-.poster-word{position:absolute;right:14px;top:10px;font-family:var(--mono);font-size:34px;font-weight:800;line-height:1;color:color-mix(in oklch,var(--cat,var(--accent)) 24%,transparent);letter-spacing:0;text-transform:uppercase}
-.poster-title{position:relative;z-index:1;font-family:var(--sans);font-size:22px;font-weight:760;line-height:1.1;color:var(--fg);max-width:10ch}
+.card-cover.fit-contain.has-img{background-color:var(--inset);background-size:auto,contain;background-repeat:no-repeat;background-position:center}
+.card-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4);background-size:auto,cover}
+.card-cover.poster{display:flex;align-items:flex-end;padding:18px;background:radial-gradient(130% 120% at 85% 10%,color-mix(in oklch,var(--cat,var(--accent)) 22%,var(--surface-2)),var(--inset)),repeating-linear-gradient(90deg,transparent 0 31px,color-mix(in oklch,var(--fg) 4%,transparent) 31px 32px)}
+.poster-word{position:absolute;right:16px;bottom:12px;z-index:0;font-family:var(--mono);font-size:46px;font-weight:800;line-height:.9;color:color-mix(in oklch,var(--cat,var(--accent)) 26%,transparent);letter-spacing:.04em;text-transform:uppercase}
+.poster-title{position:relative;z-index:1;font-family:var(--sans);font-size:20px;font-weight:760;line-height:1.2;letter-spacing:-.01em;color:var(--fg);max-width:13ch;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cover-badge{position:absolute;right:10px;top:10px;z-index:2;background:color-mix(in oklch,var(--cat,var(--accent)) 82%,black);color:#fff;border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:10px;font-weight:700}
-.card-body{display:flex;flex-direction:column;gap:10px;padding:20px 22px 22px;min-height:250px;background:linear-gradient(180deg,oklch(18% 0.018 70),oklch(14% 0.016 70));border-top:1px solid oklch(100% 0 0 / .08)}
-.art-card h3{font-family:var(--sans);font-size:18px;font-weight:720;line-height:1.34;letter-spacing:0;text-wrap:balance;color:oklch(96% 0.006 80)}
-.art-card:hover h3{color:#fff}
-.art-dek{color:oklch(82% 0.012 80 / .78);font-size:14px;line-height:1.58;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.card-foot{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:11px;color:oklch(74% 0.012 80 / .72)}
+.card-body{display:flex;flex-direction:column;gap:10px;padding:20px 22px 22px;min-height:250px;background:var(--surface);border-top:1px solid var(--border)}
+.art-card h3{font-family:var(--sans);font-size:18px;font-weight:720;line-height:1.34;letter-spacing:0;text-wrap:balance;color:var(--fg)}
+.art-card:hover h3{color:var(--accent-2)}
+.art-dek{color:var(--muted);font-size:14px;line-height:1.58;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.card-foot{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:11px;color:var(--faint)}
 .tag-list{display:flex;flex-wrap:wrap;gap:6px}
-.tag-chip{display:inline-flex;align-items:center;border:1px solid oklch(100% 0 0 / .12);background:oklch(100% 0 0 / .06);border-radius:6px;padding:2px 7px;color:oklch(82% 0.012 80 / .78);font-family:var(--mono);font-size:10.5px}
+.tag-chip{display:inline-flex;align-items:center;border:1px solid var(--border);background:var(--surface-2);border-radius:6px;padding:2px 7px;color:var(--muted);font-family:var(--mono);font-size:10.5px}
 @media(max-width:880px){.art-grid{grid-template-columns:repeat(2,1fr)}
   .art-grid.single .art-card{display:flex}.art-grid.single .card-cover{height:auto;min-height:0;aspect-ratio:16/9}
 }
 @media(max-width:560px){.wrap{padding:22px 16px 48px}.home-hero{padding:26px 0 24px}.home-title{font-size:36px}.home-title .em{display:block}.home-tagline{font-size:14px}
+  .filters{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:22px;padding-bottom:4px;scrollbar-width:none}.filters::-webkit-scrollbar{display:none}
   .pick-banner{grid-template-rows:minmax(190px,52vw) auto}.pick-banner::after{font-size:54px;right:16px}.pick-body{padding:24px 22px 26px}.pick-title{font-size:26px}
   .art-grid{grid-template-columns:1fr}.card-body{min-height:210px}}
 """
 
 _DETAIL_CSS = """
 .progress{position:fixed;top:0;left:0;height:2.5px;width:0;background:var(--accent);z-index:60;transition:width .08s linear}
-.top-in{max-width:920px;gap:14px}
+.top-in{max-width:var(--reader-maxw);gap:14px}
 .back{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--muted)}
 .back:hover{color:var(--accent-2)}
-.back .av{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-family:var(--serif);font-weight:600;font-size:11px;color:#fff;
-  background:linear-gradient(150deg,var(--cat,var(--accent)),color-mix(in oklch,var(--cat,var(--accent)) 62%,black))}
-.back .av-img{width:20px;height:20px;border-radius:6px;object-fit:contain;background:#fff;border:1px solid var(--border)}
 .wrap{max-width:var(--maxw);margin:0 auto;padding:34px 24px 80px}
 .a-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
 .tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
@@ -253,6 +272,13 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 .doc ol{list-style:decimal}.doc ol li{margin:.5em 0;padding-left:.2em}
 .doc blockquote{margin:1.4em 0;padding:.2em 0 .2em 1.3em;border-left:3px solid var(--accent-line);font-style:italic;font-size:20px;line-height:1.5;color:var(--fg-2)}
 .doc img{display:block;max-width:100%;height:auto;border-radius:12px;margin:1.6em auto}
+.doc .img-fallback{display:block;margin:1.2em 0;padding:12px 14px;border:1px dashed var(--border-2);border-radius:10px;background:var(--surface-2);font-family:var(--sans);font-size:13px;color:var(--accent-2);text-decoration:none}
+.doc .table-wrap{overflow-x:auto;margin:1.5em 0;border:1px solid var(--border);border-radius:12px;background:var(--surface);box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.doc table{width:100%;min-width:680px;border-collapse:collapse;font-family:var(--sans);font-size:13.5px;line-height:1.55}
+.doc th,.doc td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;text-align:left}
+.doc th{font-weight:650;background:var(--surface-2);color:var(--fg)}
+.doc tbody tr:last-child td{border-bottom:0}
+.doc tbody tr:hover td{background:var(--surface-2)}
 .doc pre{font-family:var(--mono);font-size:14px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:1.3em 0;line-height:1.5}
 .doc code{font-family:var(--mono);font-size:.86em;background:var(--inset);padding:.12em .35em;border-radius:5px}
 .doc pre code{background:none;padding:0}
@@ -290,7 +316,7 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 .reader button+button{border-left:1px solid var(--border)}
 .reader .opt[data-on="1"]{background:var(--accent-soft);color:var(--accent-2);font-weight:600}
 /* 文章态:.wrap 外面包 .shell-doc 双列(正文 + outline) */
-.shell-doc{max-width:920px;margin:0 auto;display:grid;grid-template-columns:var(--doc-maxw) 200px;gap:60px;padding:0 24px;align-items:start;justify-content:center}
+.shell-doc{max-width:var(--reader-maxw);margin:0 auto;display:grid;grid-template-columns:var(--doc-maxw) var(--outline-w);gap:var(--reader-gap);padding:0 24px;align-items:start;justify-content:center}
 .shell-doc>.wrap{max-width:none;margin:0;padding:34px 0 80px;min-width:0}
 .outline{position:sticky;top:64px;align-self:start;max-height:calc(100vh - 96px);overflow-y:auto;padding:38px 0 6px 18px;border-left:1px solid var(--border);font-family:var(--sans);font-size:12.5px}
 .outline-k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
@@ -305,6 +331,8 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(28px,3.4vw,39p
 /* 视频态:facade 角标(时长/发布日期/HD) + 总结 tab 章节时间戳跳转条 */
 .facade .dur{position:absolute;right:14px;bottom:14px;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.04em;background:oklch(12% 0 0 / .82);color:#fff;padding:3px 8px;border-radius:6px;backdrop-filter:blur(2px)}
 .facade .pub{position:absolute;top:18px;right:18px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:oklch(92% 0 0 / .85);background:oklch(12% 0 0 / .55);padding:4px 9px;border-radius:999px;backdrop-filter:blur(2px)}
+.x-embed{display:flex;justify-content:center;margin:18px 0 8px;min-height:260px}
+.x-embed .twitter-tweet{margin:0 auto!important}
 .chapters{display:flex;gap:8px;overflow-x:auto;padding:14px 0 6px;margin-bottom:8px;border-bottom:1px solid var(--border);scrollbar-width:thin}
 .chapters::-webkit-scrollbar{height:4px}
 .chapters::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
@@ -330,12 +358,18 @@ _THEME_JS = ("document.getElementById('theme').addEventListener('click',function
 
 _HOME_JS = """
 (function(){var input=document.getElementById('search'),cards=[].slice.call(document.querySelectorAll('[data-card]')),empty=document.getElementById('empty');
-  if(!input)return;
-  function apply(){var q=input.value.trim().toLowerCase(),hit=0;
-    cards.forEach(function(el){var ok=!q||(el.dataset.text||'').indexOf(q)>-1;el.style.display=ok?'':'none';if(ok)hit++;});
+  var chips=[].slice.call(document.querySelectorAll('.fchip')),secs=[].slice.call(document.querySelectorAll('.sec')),curCat='';
+  function apply(){var q=input?input.value.trim().toLowerCase():'',hit=0;
+    cards.forEach(function(el){var okQ=!q||(el.dataset.text||'').indexOf(q)>-1;var okC=!curCat||el.dataset.cat===curCat;
+      var ok=okQ&&okC;el.style.display=ok?'':'none';if(ok)hit++;});
+    secs.forEach(function(s){var any=[].slice.call(s.querySelectorAll('[data-card]')).some(function(c){return c.style.display!=='none';});
+      s.style.display=any?'':'none';});
     if(empty)empty.style.display=hit?'none':'block';}
-  input.addEventListener('input',apply);
-  input.addEventListener('keydown',function(e){if(e.key==='Escape'){input.value='';apply();}});
+  if(input){input.addEventListener('input',apply);
+    input.addEventListener('keydown',function(e){if(e.key==='Escape'){input.value='';apply();}});}
+  chips.forEach(function(c){c.addEventListener('click',function(){curCat=c.dataset.cat||'';
+    chips.forEach(function(x){var on=x===c;x.classList.toggle('on',on);x.setAttribute('aria-selected',on?'true':'false');});
+    apply();});});
   apply();})();
 """
 
@@ -375,7 +409,7 @@ if(bar)window.addEventListener('scroll',function(){var h=document.documentElemen
   function applySize(){var v=sizes[cur]+'px';root.style.setProperty('--doc-size',v);try{localStorage.setItem('air-fontsize',v);}catch(e){}}
   if(fd)fd.addEventListener('click',function(){if(cur>0){cur--;applySize();}});
   if(fu)fu.addEventListener('click',function(){if(cur<sizes.length-1){cur++;applySize();}});
-  if(wt){var sw=localStorage.getItem('air-width');if(sw==='820px'){wt.dataset.on='1';root.style.setProperty('--doc-maxw','820px');}
+  if(wt){var sw=localStorage.getItem('air-width');if(sw==='680px'){wt.dataset.on='0';root.style.setProperty('--doc-maxw','680px');}else{wt.dataset.on='1';root.style.setProperty('--doc-maxw','820px');}
     wt.addEventListener('click',function(){var on=wt.dataset.on==='1';
       if(on){wt.dataset.on='0';root.style.setProperty('--doc-maxw','680px');try{localStorage.setItem('air-width','680px');}catch(e){}}
       else{wt.dataset.on='1';root.style.setProperty('--doc-maxw','820px');try{localStorage.setItem('air-width','820px');}catch(e){}}});}
@@ -410,6 +444,14 @@ _LIGHTBOX_JS = """
     document.body.appendChild(ov);
   }
   [].slice.call(document.querySelectorAll('.it-media img, .doc img')).forEach(function(im){
+    function fail(){
+      var a=document.createElement('a');
+      a.className='img-fallback';a.href=im.src;a.target='_blank';a.rel='noopener';
+      a.textContent=(im.alt||'图片')+' 加载失败，点此打开原图';
+      im.replaceWith(a);
+    }
+    if(im.complete&&!im.naturalWidth){fail();return;}
+    im.addEventListener('error',fail,{once:true});
     im.style.cursor='zoom-in';
     im.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();open(im.currentSrc||im.src);});
   });
@@ -477,6 +519,13 @@ def _yt_id(url):
     return m.group(1) if m else ""
 
 
+def _x_status_url(url):
+    m = _X_STATUS_RE.search(url or "")
+    if not m:
+        return ""
+    return f"https://twitter.com/{m.group(1)}/status/{m.group(2)}"
+
+
 def _cat_class(cat):
     return _CAT_CLASS.get(cat, "c-research")
 
@@ -539,8 +588,84 @@ def _cover_exists(src):
     return src.startswith(("http://", "https://"))
 
 
+def _image_size_from_bytes(data):
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+        return struct.unpack(">II", data[16:24])
+    if data[:6] in (b"GIF87a", b"GIF89a") and len(data) >= 10:
+        return struct.unpack("<HH", data[6:10])
+    if data[:3] == b"\xff\xd8\xff":
+        i = 2
+        while i + 9 < len(data):
+            while i < len(data) and data[i] != 0xFF:
+                i += 1
+            while i < len(data) and data[i] == 0xFF:
+                i += 1
+            if i >= len(data):
+                break
+            marker = data[i]
+            i += 1
+            if marker in (*range(0xD0, 0xDA), 0x01):
+                continue
+            if i + 2 > len(data):
+                break
+            seg_len = struct.unpack(">H", data[i:i + 2])[0]
+            if seg_len < 2 or i + seg_len > len(data):
+                break
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                h, w = struct.unpack(">HH", data[i + 3:i + 7])
+                return w, h
+            i += seg_len
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        if data[12:16] == b"VP8X" and len(data) >= 30:
+            w = 1 + int.from_bytes(data[24:27], "little")
+            h = 1 + int.from_bytes(data[27:30], "little")
+            return w, h
+        if data[12:16] == b"VP8 " and len(data) >= 30:
+            w, h = struct.unpack("<HH", data[26:30])
+            return w & 0x3FFF, h & 0x3FFF
+        if data[12:16] == b"VP8L" and len(data) >= 25:
+            b0, b1, b2, b3 = data[21:25]
+            w = 1 + (((b1 & 0x3F) << 8) | b0)
+            h = 1 + ((b3 << 6) | (b2 >> 2) | ((b1 & 0xC0) << 6))
+            return w, h
+    return None
+
+
+def _local_image_size(src):
+    if not (src or "").startswith("/img/"):
+        return None
+    root = (DIST / "img").resolve()
+    path = (DIST / src.removeprefix("/")).resolve()
+    try:
+        if root not in path.parents or not path.is_file():
+            return None
+        return _image_size_from_bytes(path.read_bytes()[:1_000_000])
+    except OSError:
+        return None
+
+
+def _cover_layout(item, cover):
+    if item.get("category") == "视频":
+        return "", "", ""
+    cls = " fit-contain"
+    size = _local_image_size(cover)
+    if not size:
+        return cls, "", ""
+    w, h = size
+    if h and w / h >= 2.15:
+        return cls + " fit-wide", f"--cover-aspect:{w / h:.3f};", " fit-wide"
+    return cls, "", ""
+
+
 def _item_cover(item):
-    """首页卡片封面:视频取 YouTube 缩略图;文章取正文/译文/总结里的首图;站内图不存在则跳过。"""
+    """首页卡片封面:显式 cover > YouTube 缩略图 > 正文/译文/总结首图。"""
+    try:
+        meta = json.loads(item.get("tweet_meta") or "{}")
+    except json.JSONDecodeError:
+        meta = {}
+    cover = (meta.get("cover") or "").strip()
+    if _cover_exists(cover):
+        return cover
     for url in (item.get("url", ""), item.get("video_url", "")):
         if vid := _yt_id(url):
             return _yt_thumb_url(vid)
@@ -560,14 +685,17 @@ def _deep_kind(item):
     if (item.get("translation_md") or "").strip():
         return "全文翻译"
     if (item.get("summary_md") or "").strip():
+        if item.get("category") == "文章":
+            return "文章摘要"
         return "视频总结"
     if "bilibili" in (item.get("video_url") or ""):
         return "B站译制"
     return item.get("category") or "精选"
 
 
-def _cover_fit_class(item):
-    return "" if item.get("category") == "视频" else " fit-contain"
+def _cover_style(cover, layout_style):
+    safe = _e((cover or "").replace("'", "%27"))
+    return f"--cover-img:url('{safe}');{layout_style}"
 
 
 def _excerpt(item, limit=118):
@@ -667,44 +795,43 @@ def _render_home(items, _descriptions, _methods, interactions, out):
     def _home_href(it):
         href, is_ext = _item_href(it, interactions)
         if not is_ext and _has_zh_deep(it):
-            href += "" if (it.get("summary_md") or "").strip() else "#zh"
+            href += "#en" if (it.get("category") == "视频" and (it.get("summary_md") or "").strip()) else "#zh"
         return href, (' target="_blank" rel="noopener"' if is_ext else "")
 
     def _poster_word(it):
         kind = _deep_kind(it)
         return {
             "全文翻译": "READ",
+            "文章摘要": "READ",
             "视频总结": "WATCH",
             "B站译制": "VIDEO",
         }.get(kind, (_CAT_EN.get(it.get("category", ""), "PICK") or "PICK").upper())
 
-    def _cover_html(it):
+    def _cover_html(it, cover=None):
         cat_cls = _cat_class(it.get("category", ""))
         kind = _deep_kind(it)
-        cover = _item_cover(it)
+        cover = cover if cover is not None else _item_cover(it)
         badge = _e(kind)
         if cover:
-            safe = _e(cover.replace("'", "%27"))
-            fit = _cover_fit_class(it)
-            return (f'<div class="card-cover has-img{fit} {cat_cls}" style="--cover-img:url(\'{safe}\')">'
+            fit, layout_style, _banner_fit = _cover_layout(it, cover)
+            return (f'<div class="card-cover has-img{fit} {cat_cls}" style="{_cover_style(cover, layout_style)}">'
                     f'<span class="cover-badge">{badge}</span></div>')
         title = it.get("title_zh") or it.get("title") or ""
-        first = re.split(r"[：:，,。.!?？\s]", title.strip(), 1)[0][:10] or "AI"
+        first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:42] or "AI")
         return (f'<div class="card-cover poster {cat_cls}"><span class="cover-badge">{badge}</span>'
                 f'<div class="poster-word">{_e(_poster_word(it))}</div>'
                 f'<div class="poster-title">{_e(first)}</div></div>')
 
-    def _pick_cover_html(it):
+    def _pick_cover_html(it, cover=None):
         cat_cls = _cat_class(it.get("category", ""))
         kind = _e(_deep_kind(it))
-        cover = _item_cover(it)
+        cover = cover if cover is not None else _item_cover(it)
         if cover:
-            safe = _e(cover.replace("'", "%27"))
-            fit = _cover_fit_class(it)
-            return (f'<div class="pick-cover has-img{fit} {cat_cls}" style="--cover-img:url(\'{safe}\')">'
+            fit, layout_style, _banner_fit = _cover_layout(it, cover)
+            return (f'<div class="pick-cover has-img{fit} {cat_cls}" style="{_cover_style(cover, layout_style)}">'
                     f'<span class="cover-badge">{kind}</span></div>')
         title = it.get("title_zh") or it.get("title") or ""
-        first = re.split(r"[：:，,。.!?？\s]", title.strip(), 1)[0][:12] or "AI"
+        first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:60] or "AI")
         return (f'<div class="pick-cover poster {cat_cls}"><span class="cover-badge">{kind}</span>'
                 f'<div class="poster-word">{_e(_poster_word(it))}</div>'
                 f'<div class="poster-title">{_e(first)}</div></div>')
@@ -724,7 +851,7 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         tag_html = "".join(f'<span class="tag-chip">{_e(t)}</span>' for t in tags[:3] if t)
         dek_html = f'<p class="art-dek">{_e(dek)}</p>' if dek else ""
         blob = _e(f"{title} {dek} {src} {cat} {' '.join(tags)}".lower())
-        return (f'<a class="art-card {_cat_class(cat)}" data-card data-text="{blob}" href="{_e(href)}"{ext_attr}>'
+        return (f'<a class="art-card {_cat_class(cat)}" data-card data-cat="{_e(cat)}" data-text="{blob}" href="{_e(href)}"{ext_attr}>'
                 f'{_cover_html(it)}<div class="card-body">'
                 f'<div class="art-meta"><span>{_e(src)}</span><span>·</span><span>{_e(cat)}</span></div>'
                 f'<h3>{_e(title)}</h3>{dek_html}'
@@ -747,10 +874,12 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         dek = _excerpt(pick_item, 150)
         dek_html = f'<p class="pick-dek">{_e(dek)}</p>' if dek else ""
         blob = _e(f"{title} {dek} {pick_item.get('source_label','')} {cat} {_deep_kind(pick_item)}".lower())
+        pick_cover = _item_cover(pick_item)
+        _fit, _style, banner_fit = _cover_layout(pick_item, pick_cover)
         pick_html = (
             '<section class="sec"><div class="sec-row"><h2 class="sec-k">今日精选</h2></div>'
-            f'<a class="pick-banner {_cat_class(cat)}" data-card data-text="{blob}" data-word="{_e(_poster_word(pick_item))}" href="{_e(href)}"{ext_attr}>'
-            f'{_pick_cover_html(pick_item)}<div class="pick-body">'
+            f'<a class="pick-banner{banner_fit} {_cat_class(cat)}" data-card data-cat="{_e(cat)}" data-text="{blob}" data-word="{_e(_poster_word(pick_item))}" href="{_e(href)}"{ext_attr}>'
+            f'{_pick_cover_html(pick_item, pick_cover)}<div class="pick-body">'
             f'<div class="pick-meta"><span class="pill strong">{_e(_deep_kind(pick_item))}</span>'
             f'<span class="pill">人工精选</span><span>{_e(pick_item.get("source_label",""))}</span>'
             f'<span>·</span><span>{_e(cat)}</span></div>'
@@ -768,13 +897,27 @@ def _render_home(items, _descriptions, _methods, interactions, out):
             f'<section class="sec"><div class="sec-row"><h2 class="sec-k">{label}</h2></div>'
             f'<div class="{grid_cls}">\n{cards}\n</div></section>')
 
+    # 类型过滤条:仅当卡片池里出现 ≥2 个类型时才显示。纯前端过滤已有卡片,不引入计数/收藏。
+    # 按卡片实际出现顺序取类型(_CAT_ORDER 用的是"资讯"而非"文章",不能拿它当白名单过滤)。
+    filter_html = ""
+    cats_present = []
+    for it in card_pool:
+        c = it.get("category")
+        if c and c not in cats_present:
+            cats_present.append(c)
+    if len(cats_present) > 1:
+        chips = '<button class="fchip on" data-cat="" role="tab" aria-selected="true">全部</button>' + "".join(
+            f'<button class="fchip" data-cat="{_e(c)}" role="tab" aria-selected="false">{_e(c)}</button>'
+            for c in cats_present)
+        filter_html = f'<div class="filters" id="filters" role="tablist" aria-label="按类型筛选">{chips}</div>'
+
     total = sum(stats.values())
     latest = max(dates, default="")
     stat = f"{len(stats)} 来源 · {total} 条 · {_fmt_md(latest)} 更新"
 
     page = (_head("AI Radar — 精选", _HOME_CSS)
             + "\n<body>\n" + _top_header("home", stat=stat, search_ph="搜内容")
-            + '\n<main class="wrap">\n' + hero_html + "\n" + pick_html + "\n" + latest_html + "\n</main>\n"
+            + '\n<main class="wrap">\n' + hero_html + "\n" + filter_html + "\n" + pick_html + "\n" + latest_html + "\n</main>\n"
             + '<p class="empty" id="empty">没有匹配的精选内容。</p>\n'
             + f'<footer class="foot"><span>AI&nbsp;RADAR</span><span class="sep">·</span>'
             + f'<span>人工精选 · 无登录分享</span><span class="sep">·</span>'
@@ -857,6 +1000,15 @@ def _bili_embed(bili_url, yt_url, src="", item=None):
     return _facade(cover, src, "哔哩哔哩 · 中文翻译", data, hint="中文翻译 · 点击播放", published=pub)
 
 
+def _x_embed(url):
+    status_url = _x_status_url(url)
+    if not status_url:
+        return ""
+    return ('<div class="x-embed"><blockquote class="twitter-tweet" data-dnt="true">'
+            f'<a href="{_e(status_url)}">在 X 查看视频</a>'
+            '</blockquote></div>')
+
+
 # v2:文章正文标题注入 id 并抽出 outline(供右浮目录使用)。匹配 h1-h6,渲染时钳制层级。
 _H_TAG_RE = re.compile(r'<h([1-6])([^>]*)>(.+?)</h\1>', re.S)
 
@@ -919,22 +1071,34 @@ def _strip_doc_boilerplate(html_str):
 
 
 def _tabs(item):
-    """文章态 tabs：原文（content_html）/ 中文翻译（translation_md 有则渲染全文，无则诚实空态）。
-    返回 (tabs_html, outline)。outline 优先取译文,无则取原文,从而 outline 内容与默认打开的 tab 一致。"""
+    """文章态 tabs：原文 / 中文翻译或摘要。
+    返回 (tabs_html, outline)。outline 优先取中文内容,无则取原文,从而 outline 内容与默认打开的 tab 一致。"""
     content = _strip_doc_boilerplate(_lazy_imgs(item.get("content_html") or ""))
+    has_content = bool(content.strip())
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
     tmd = (item.get("translation_md") or "").strip()
+    smd = (item.get("summary_md") or "").strip()
+    has_zh = bool(tmd or smd)
     if tmd:
-        zh, zh_cls = _lazy_imgs(md_to_html(tmd)), "panel doc"
+        zh, zh_cls, zh_label = _lazy_imgs(md_to_html(tmd)), "panel doc", "中文翻译"
+    elif smd:
+        zh, zh_cls, zh_label = _lazy_imgs(md_to_html(smd)), "panel doc", "中文摘要"
     else:
-        zh, zh_cls = _tr_empty("文章"), "panel"
+        zh, zh_cls, zh_label = "", "", ""
     outline, seen = [], set()
-    # 先注 zh 再注原文:译文若有就当主大纲(显示给用户)
-    if tmd:
+    # 先注 zh 再注原文:中文内容若有就当主大纲(显示给用户)
+    if has_zh:
         zh = _inject_outline_ids(zh, outline, seen)
-    yuanwen = _inject_outline_ids(yuanwen, outline if not tmd else [], seen if not tmd else set())
+    yuanwen = _inject_outline_ids(yuanwen, outline if not has_zh else [], seen if not has_zh else set())
+    if not has_zh:
+        return ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button></div>'
+                f'<section class="panel on doc" id="p-orig">{yuanwen}</section>'), outline
+    if not has_content:
+        tabs_html = (f'<div class="tabs"><button class="tab on" data-panel="p-zh">{zh_label}</button></div>'
+                     f'<section class="{zh_cls} on" id="p-zh">{zh}</section>')
+        return tabs_html, outline
     tabs_html = ('<div class="tabs"><button class="tab on" data-panel="p-orig">原文</button>'
-                 '<button class="tab" data-panel="p-zh">中文翻译</button></div>'
+                 f'<button class="tab" data-panel="p-zh">{zh_label}</button></div>'
                  f'<section class="panel on doc" id="p-orig">{yuanwen}</section>'
                  f'<section class="{zh_cls}" id="p-zh">{zh}</section>')
     return tabs_html, outline
@@ -981,17 +1145,19 @@ def _chapters_html(chapters):
     return '<div class="chapters">' + "".join(parts) + '</div>'
 
 
-def _detail_header(src, cat_cls, with_reader=False):
-    """with_reader=True 时(仅文章态)在主题切换前插入阅读偏好工具条:字号 -/+/宽窄/sepia。"""
+def _detail_header(src, cat_cls, with_reader=False, maxw=None):
+    """with_reader=True 时(仅文章态)在主题切换前插入阅读偏好工具条:字号 -/+/宽窄/sepia。
+    maxw 给定时(视频态)把顶栏收窄到与正文列同宽,避免顶栏 920 比窄正文脱节;文章态不传,保持 920 对齐 shell-doc。"""
     reader = ('<div class="reader" role="toolbar" aria-label="阅读偏好">'
               '<button id="font-down" title="缩小字号">A−</button>'
               '<button id="font-up" title="放大字号">A+</button>'
-              '<button id="width-toggle" class="opt" data-on="0" title="切宽窄读">⇆</button>'
+              '<button id="width-toggle" class="opt" data-on="1" title="切宽窄读">⇆</button>'
               '<button id="sepia" class="opt" data-on="0" title="柔光阅读底">◐</button>'
               '</div>') if with_reader else ""
-    return (f'<header class="top"><div class="top-in">'
+    style = f' style="max-width:{maxw}"' if maxw else ""
+    return (f'<header class="top"><div class="top-in"{style}>'
             f'<a id="back" href="/" class="back {cat_cls}">'
-            f'{_avatar(src, "av")}<span>← 总览</span></a>'
+            f'<span>← 总览</span></a>'
             f'<div class="top-right">{reader}<button class="icon-btn" id="theme" aria-label="切换深浅色">{_SUNMOON_SVG}</button></div>'
             f'</div></header>')
 
@@ -1007,7 +1173,10 @@ def _render_detail(item, out, descriptions):
     raw_url = item.get("url", "")
     when = _fmt_time(item)
     vid = _yt_id(raw_url)
+    x_status = _x_status_url(raw_url)
     is_video = cat == "视频" or bool(vid)
+    # 视频态宽度:YouTube 16:9 需要更宽(760);X/推文 embed 本身仅 ~470-550,收窄到 620 把它框住。
+    detail_maxw = "680px" if not is_video else ("620px" if x_status else "760px")
 
     meta = (f'<div class="a-meta"><span class="tag"><span class="dot"></span>{_e(cat)}</span>'
             f'<span class="src">{_e(src)}</span><span class="mono">· {_e(when)}</span></div>')
@@ -1019,14 +1188,21 @@ def _render_detail(item, out, descriptions):
         desc_en = item.get("summary") or ""
         desc_html = (f'<p style="font-family:var(--serif);font-size:16px;line-height:1.7;color:var(--fg-2);margin-top:18px">{_e(desc_en)}</p>'
                      if desc_en else "")
-        en_panel = _youtube_embed(raw_url, src, item) + desc_html
+        if vid:
+            en_panel = _youtube_embed(raw_url, src, item) + desc_html
+            open_label = "在 YouTube 打开"
+        elif x_status:
+            en_panel = _x_embed(raw_url) + desc_html
+            open_label = "在 X 打开"
+        else:
+            en_panel = desc_html
+            open_label = "打开原视频"
         bili = _bili_embed(item.get("video_url", ""), raw_url, src, item)
+        zh_panel = ""
         if bili:
             zh_panel = (bili + '<p style="margin-top:14px;font-size:13px;color:var(--muted)">本视频已翻译并搬运至 '
                         f'<a href="{_safe_url(item.get("video_url",""))}" target="_blank" rel="noopener" '
                         'style="color:var(--accent-2);text-decoration:underline">哔哩哔哩</a>;点封面在站内播放中文翻译版。</p>')
-        else:
-            zh_panel = _tr_empty("视频")
         # v2:总结 tab 抽时间戳章节(`## NN:NN 标题`形式),无时间戳时正常渲染
         summ_md = (item.get("summary_md") or "").strip()
         if summ_md:
@@ -1038,21 +1214,22 @@ def _render_detail(item, out, descriptions):
                          '<h3>这条视频还没有内容总结</h3>'
                          '<p>挑中的视频可上传一篇中文总结(看完视频提炼要点),在此 tab 阅读。</p>'
                          '<p class="why">上传:src/publish_item.py --summary &lt;总结.md&gt;</p></div>')
-        has_sum = bool(summ_md)
-        on_sum, on_en = (" on", "") if has_sum else ("", " on")
+        tabs = ['<button class="tab on" data-panel="p-en">英文</button>']
+        panels = [f'<section class="panel on" id="p-en">{en_panel}</section>']
+        if zh_panel:
+            tabs.append('<button class="tab" data-panel="p-zh">中文</button>')
+            panels.append(f'<section class="panel" id="p-zh">{zh_panel}</section>')
+        tabs.append('<button class="tab" data-panel="p-sum">总结</button>')
+        panels.append(f'<section class="panel doc" id="p-sum">{sum_panel}</section>')
         body = (f'<main class="wrap {cat_cls}">'
                 f'{meta}<h1 class="title">{_e(head_title)}</h1>{sub_html}'
                 f'<div class="actions">'
-                f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}在 YouTube 打开</a>'
+                f'<a class="btn primary" href="{url}" target="_blank" rel="noopener">{_EXTLINK_SVG}{open_label}</a>'
                 f'<button class="btn" id="copy" data-url="{_e(raw_url)}">{_COPY_SVG}<span>复制链接</span></button></div>'
-                f'<div class="tabs"><button class="tab{on_en}" data-panel="p-en">英文</button>'
-                f'<button class="tab" data-panel="p-zh">中文</button>'
-                f'<button class="tab{on_sum}" data-panel="p-sum">总结</button></div>'
-                f'<section class="panel{on_en}" id="p-en">{en_panel}</section>'
-                f'<section class="panel" id="p-zh">{zh_panel}</section>'
-                f'<section class="panel{on_sum} doc" id="p-sum">{sum_panel}</section></main>')
+                f'<div class="tabs">{"".join(tabs)}</div>'
+                f'{"".join(panels)}</main>')
         progress = ""
-        header_html = _detail_header(src, cat_cls, with_reader=False)
+        header_html = _detail_header(src, cat_cls, with_reader=False, maxw=detail_maxw)
     else:
         # ---- 文章态:正文抽 outline,wrap 外面包 .shell-doc 双列(正文 + 右浮目录) ----
         subtitle = title if (title_zh and title and title_zh != title) else ""
@@ -1071,9 +1248,11 @@ def _render_detail(item, out, descriptions):
         progress = '<div class="progress" id="progress"></div>'
         header_html = _detail_header(src, cat_cls, with_reader=True)
 
-    page = (_head(head_title + " · AI Radar", _DETAIL_CSS, maxw="680px" if not is_video else "760px")
+    x_widget = ('\n<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>'
+                if is_video and x_status else "")
+    page = (_head(head_title + " · AI Radar", _DETAIL_CSS, maxw=detail_maxw)
             + "\n<body>\n" + progress + "\n" + header_html + "\n" + body
-            + f'\n<script>{_THEME_JS}{_DETAIL_JS}{_LIGHTBOX_JS}</script>\n</body>\n</html>\n')
+            + f'\n<script>{_THEME_JS}{_DETAIL_JS}{_LIGHTBOX_JS}</script>{x_widget}\n</body>\n</html>\n')
     (out / "item" / f"{item.get('hash','')}.html").write_text(page, encoding="utf-8")
 
 

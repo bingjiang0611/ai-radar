@@ -60,6 +60,21 @@ class TestContent(unittest.TestCase):
         self.assertIn("<blockquote>q</blockquote>", out)
         self.assertIn("&lt;script&gt;", out)
 
+    def test_md_to_html_pipe_table(self):
+        out = content.md_to_html(
+            "| 路线 | 证据 |\n"
+            "|---|---|\n"
+            "| ACE | **中到高** |\n"
+            "| DGM | [paper](https://example.com) |\n"
+        )
+        self.assertIn('<div class="table-wrap">', out)
+        self.assertIn("<table>", out)
+        self.assertIn("<th>路线</th>", out)
+        self.assertIn("<td>ACE</td>", out)
+        self.assertIn("<strong>中到高</strong>", out)
+        self.assertIn('<a href="https://example.com">paper</a>', out)
+        self.assertNotIn("<p>| 路线", out)
+
     def test_download_image_accepts_short_timeouts(self):
         old_dist_img = content.DIST_IMG
         fake_png = b"\x89PNG\r\n\x1a\nabc"
@@ -136,8 +151,12 @@ class TestPublishItem(unittest.TestCase):
         self.conn.row_factory = sqlite3.Row
         init_db(self.conn)
         self.tmp = TemporaryDirectory()
+        self._old_publish_dist_img = publish_item.DIST_IMG
+        publish_item.DIST_IMG = Path(self.tmp.name) / "img"
+        publish_item.DIST_IMG.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
+        publish_item.DIST_IMG = self._old_publish_dist_img
         self.conn.close()
         self.tmp.cleanup()
 
@@ -180,6 +199,50 @@ class TestPublishItem(unittest.TestCase):
         self.assertEqual(row["source_label"], "用户精选")
         self.assertEqual(row["summary_md"], "# 新总结\n\n要点")
 
+    def test_publish_cover_updates_tweet_meta(self):
+        (publish_item.DIST_IMG / "x-cover.jpg").write_bytes(b"x")
+        md = self._md("sum.md", "# 总结\n\n要点")
+        args = publish_item.parse_args([
+            "--url", "https://x.com/shao__meng/status/2075764484027932963",
+            "--title", "Motion atlas",
+            "--kind", "video",
+            "--summary", md,
+            "--cover", "/img/x-cover.jpg",
+        ])
+        with contextlib.redirect_stdout(io.StringIO()):
+            h = publish_item.publish(args, self.conn)
+        row = self.conn.execute("SELECT * FROM items WHERE hash=?", (h,)).fetchone()
+        self.assertIn('"/img/x-cover.jpg"', row["tweet_meta"])
+
+    def test_publish_x_video_rejects_missing_cover(self):
+        md = self._md("sum.md", "# 总结\n\n要点")
+        args = publish_item.parse_args([
+            "--url", "https://x.com/shao__meng/status/2075764484027932963",
+            "--title", "Motion atlas",
+            "--kind", "video",
+            "--summary", md,
+        ])
+        with self.assertRaisesRegex(ValueError, "X 视频必须提供真实封面"):
+            publish_item.publish(args, self.conn)
+
+    def test_validate_dist_rejects_x_video_poster_fallback(self):
+        old_root = publish_item.ROOT
+        with TemporaryDirectory() as td:
+            try:
+                publish_item.ROOT = Path(td)
+                item_dir = publish_item.ROOT / "dist" / "item"
+                item_dir.mkdir(parents=True)
+                (publish_item.ROOT / "dist" / "index.html").write_text(
+                    '<a class="pick-banner c-video" href="/item/xh1.html#en">'
+                    '<div class="pick-cover poster c-video"></div></a>',
+                    encoding="utf-8",
+                )
+                (item_dir / "xh1.html").write_text('<blockquote class="twitter-tweet"></blockquote>', encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "X 视频首页卡片缺封面"):
+                    publish_item.validate_dist("xh1")
+            finally:
+                publish_item.ROOT = old_root
+
     def test_publish_rejects_obsidian_embeds(self):
         md = self._md("bad.md", "# T\n\n![[attachments/a.png]]")
         args = publish_item.parse_args([
@@ -210,11 +273,132 @@ class TestRender(unittest.TestCase):
         self.assertIn("https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg", html)
         self.assertNotIn("/thumb/", html)
 
+    def test_x_video_detail_uses_native_embed(self):
+        item = {
+            "hash": "xh1",
+            "source_id": "user-curated",
+            "source_label": "Berryxia.AI",
+            "category": "视频",
+            "title": "Context engineering",
+            "title_zh": "Anthropic 上下文工程",
+            "summary": "A public X video.",
+            "summary_zh": "",
+            "url": "https://x.com/berryxia/status/2070911343293825059",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": "",
+            "content_html": "",
+            "translation_md": "",
+            "summary_md": "## 要点\n\n上下文管理。",
+            "video_url": "",
+        }
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+            index = (out / "index.html").read_text(encoding="utf-8")
+            detail = (out / "item" / "xh1.html").read_text(encoding="utf-8")
+        self.assertIn('href="/item/xh1.html#en"', index)
+        self.assertIn('class="twitter-tweet"', detail)
+        self.assertIn("https://twitter.com/berryxia/status/2070911343293825059", detail)
+        self.assertIn("https://platform.twitter.com/widgets.js", detail)
+        self.assertIn("在 X 打开", detail)
+        self.assertIn('class="tab on" data-panel="p-en"', detail)
+        self.assertIn('class="panel on" id="p-en"', detail)
+        self.assertNotIn('data-panel="p-zh"', detail)
+        self.assertNotIn("这条视频还没有中文字幕", detail)
+        self.assertIn('data-panel="p-sum"', detail)
+
+    def test_x_article_detail_stays_article(self):
+        item = {
+            "hash": "xa1",
+            "source_id": "user-curated",
+            "source_label": "ClaudeDevs",
+            "category": "文章",
+            "title": "Model and effort",
+            "title_zh": "Claude Code 中的 model 与 effort",
+            "summary": "",
+            "summary_zh": "",
+            "url": "https://x.com/ClaudeDevs/status/2074900291062034618",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": "",
+            "content_html": "<p>original</p>",
+            "translation_md": "## 中文译文\n\n正文",
+            "summary_md": "",
+            "video_url": "",
+        }
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+            detail = (out / "item" / "xa1.html").read_text(encoding="utf-8")
+        self.assertIn("打开原文", detail)
+        self.assertIn("中文翻译", detail)
+        self.assertNotIn('class="twitter-tweet"', detail)
+        self.assertNotIn("platform.twitter.com/widgets.js", detail)
+
     def test_tabs_translation_outline(self):
         panel, outline = render._tabs({"content_html": "<p>x</p>", "translation_md": "## 中文段落\n\n正文"})
         self.assertIn("中文翻译", panel)
         self.assertIn("中文段落", panel)
         self.assertEqual(outline[0][2], "中文段落")
+
+    def test_article_without_chinese_hides_chinese_tab(self):
+        panel, outline = render._tabs({"content_html": "<h2>Original</h2><p>x</p>"})
+        self.assertIn('data-panel="p-orig"', panel)
+        self.assertNotIn('data-panel="p-zh"', panel)
+        self.assertNotIn("这篇还没有中文全文", panel)
+        self.assertEqual(outline[0][2], "Original")
+
+    def test_article_summary_uses_article_labels(self):
+        item = {"category": "文章", "content_html": "", "summary_md": "## 摘要\n\n要点"}
+        panel, outline = render._tabs(item)
+        self.assertEqual(render._deep_kind(item), "文章摘要")
+        self.assertIn("中文摘要", panel)
+        self.assertIn('class="tab on" data-panel="p-zh"', panel)
+        self.assertNotIn('data-panel="p-orig"', panel)
+        self.assertNotIn("本条无正文", panel)
+        self.assertIn("摘要", panel)
+        self.assertEqual(outline[0][2], "摘要")
+
+    def test_wide_article_cover_uses_wide_layout(self):
+        old_render_dist = render.DIST
+        old_content_dist_img = content.DIST_IMG
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            try:
+                render.DIST = root
+                content.DIST_IMG = root / "img"
+                content.DIST_IMG.mkdir(parents=True)
+                png = (b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR"
+                       + (1200).to_bytes(4, "big") + (400).to_bytes(4, "big")
+                       + b"\x08\x02\x00\x00\x00\x00\x00\x00\x00")
+                (content.DIST_IMG / "wide.png").write_bytes(png)
+                item = {
+                    "hash": "wide1",
+                    "source_id": "user-curated",
+                    "source_label": "antirez",
+                    "category": "文章",
+                    "title": "Wide cover",
+                    "title_zh": "横幅封面",
+                    "summary": "summary",
+                    "summary_zh": "",
+                    "url": "https://example.com/wide",
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "published_at": "",
+                    "content_html": "",
+                    "translation_md": "",
+                    "summary_md": "## 摘要\n\n要点",
+                    "video_url": "",
+                    "tweet_meta": '{"cover": "/img/wide.png"}',
+                }
+                out = root / "out"
+                render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+                index = (out / "index.html").read_text(encoding="utf-8")
+            finally:
+                render.DIST = old_render_dist
+                content.DIST_IMG = old_content_dist_img
+                render._img_have_cache[0] = None
+        self.assertIn("pick-banner fit-wide", index)
+        self.assertIn("pick-cover has-img fit-contain fit-wide", index)
+        self.assertIn("--cover-aspect:3.000;", index)
 
     def test_render_site_outputs_only_overview_and_details(self):
         item = {
@@ -247,11 +431,21 @@ class TestRender(unittest.TestCase):
             self.assertNotIn("reads.html", index)
             self.assertIn('href="/"', detail)
             self.assertIn("← 总览", detail)
+            self.assertNotIn('class="av"', detail)
+            self.assertNotIn('class="av-img"', detail)
+            self.assertIn("--doc-maxw:820px", detail)
+            self.assertIn(".top-in{max-width:var(--reader-maxw)", detail)
+            self.assertIn(".shell-doc{max-width:var(--reader-maxw)", detail)
+            self.assertIn('id="width-toggle" class="opt" data-on="1"', detail)
 
     def test_card_cover_uses_article_contain_and_video_cover(self):
         self.assertEqual(
             render._item_cover({"url": "https://www.youtube.com/watch?v=rzVhPTSNWnE"}),
             "https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg",
+        )
+        self.assertEqual(
+            render._item_cover({"tweet_meta": '{"cover": "https://example.com/x.jpg"}'}),
+            "https://example.com/x.jpg",
         )
         content.DIST_IMG.mkdir(parents=True, exist_ok=True)
         (content.DIST_IMG / "cover.png").write_bytes(b"x")

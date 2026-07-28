@@ -34,6 +34,7 @@ def render_current():
         [i.get("content_html", "") for i in db_items]
         + [i.get("translation_md", "") for i in db_items]
         + [i.get("summary_md", "") for i in db_items]
+        + [i.get("tweet_meta", "") for i in db_items]
     )
     if purged or removed_imgs:
         print(f"retention: purged {purged} rows, removed {removed_imgs} images")

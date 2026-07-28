@@ -104,6 +104,7 @@ _MD_IMG = re.compile(r'!\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)')
 _MD_LINK = re.compile(r'\[([^\]]+)\]\((\S+?)(?:\s+"[^"]*")?\)')
 _MD_BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _MD_CODE = re.compile(r"`([^`]+)`")
+_MD_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
 def _md_inline(text):
@@ -113,6 +114,37 @@ def _md_inline(text):
     text = _MD_BOLD.sub(r"<strong>\1</strong>", text)
     text = _MD_CODE.sub(r"<code>\1</code>", text)
     return text
+
+
+def _table_cells(line):
+    line = line.strip()
+    if line.startswith("|"):
+        line = line[1:]
+    if line.endswith("|"):
+        line = line[:-1]
+    return [c.strip() for c in line.split("|")]
+
+
+def _is_table_sep(line):
+    return bool(_MD_TABLE_SEP.match(line or ""))
+
+
+def _render_table(rows):
+    if len(rows) < 2:
+        return ""
+    head = _table_cells(rows[0])
+    sep = _table_cells(rows[1])
+    body = [_table_cells(r) for r in rows[2:]]
+    if not head or len(sep) != len(head) or any(len(r) != len(head) for r in body):
+        return ""
+    th = "".join(f"<th>{_md_inline(c)}</th>" for c in head)
+    trs = []
+    for row in body:
+        tds = "".join(f"<td>{_md_inline(c)}</td>" for c in row)
+        trs.append(f"<tr>{tds}</tr>")
+    return ('<div class="table-wrap"><table><thead><tr>' + th
+            + '</tr></thead><tbody>' + "".join(trs)
+            + '</tbody></table></div>')
 
 
 def md_to_html(md):
@@ -150,6 +182,20 @@ def md_to_html(md):
             flush()
             close_list()
             i += 1
+            continue
+        if "|" in line and i + 1 < len(lines) and _is_table_sep(lines[i + 1]):
+            flush()
+            close_list()
+            rows = [line, lines[i + 1].rstrip()]
+            i += 2
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                rows.append(lines[i].rstrip())
+                i += 1
+            table = _render_table(rows)
+            if table:
+                out.append(table)
+            else:
+                para.extend(r.strip() for r in rows)
             continue
         h = re.match(r"(#{1,6})\s+(.*)", line)
         if h:
