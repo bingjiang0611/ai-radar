@@ -3,8 +3,7 @@ CLAUDE.md
 .claude/
 
 # 运行产物
-data/*.db
-data/*.db-*
+data/*.db*
 dist/
 .wrangler/
 __pycache__/
