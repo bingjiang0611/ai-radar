@@ -273,6 +273,15 @@ class TestRender(unittest.TestCase):
         self.assertIn("https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg", html)
         self.assertNotIn("/thumb/", html)
 
+    def test_video_facade_prefers_explicit_cover(self):
+        content.DIST_IMG.mkdir(parents=True, exist_ok=True)
+        (content.DIST_IMG / "video-cover.jpg").write_bytes(b"x")
+        render._img_have_cache[0] = None
+        item = {"tweet_meta": '{"cover": "/img/video-cover.jpg"}'}
+        html = render._youtube_embed("https://www.youtube.com/watch?v=rzVhPTSNWnE", item=item)
+        self.assertIn('src="/img/video-cover.jpg"', html)
+        self.assertNotIn("https://i.ytimg.com/vi/rzVhPTSNWnE/hq720.jpg", html)
+
     def test_x_video_detail_uses_native_embed(self):
         item = {
             "hash": "xh1",
@@ -306,6 +315,32 @@ class TestRender(unittest.TestCase):
         self.assertNotIn('data-panel="p-zh"', detail)
         self.assertNotIn("这条视频还没有中文字幕", detail)
         self.assertIn('data-panel="p-sum"', detail)
+
+    def test_bili_video_home_link_defaults_to_english_tab(self):
+        item = {
+            "hash": "bv1",
+            "source_id": "user-curated",
+            "source_label": "Google DeepMind",
+            "category": "视频",
+            "title": "Don't Ship Skills Without Evals",
+            "title_zh": "",
+            "summary": "",
+            "summary_zh": "",
+            "url": "https://www.youtube.com/watch?v=rzVhPTSNWnE",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": "",
+            "content_html": "",
+            "translation_md": "",
+            "summary_md": "",
+            "video_url": "https://www.bilibili.com/video/BV1xx411c7mD/?cid=1",
+            "tweet_meta": "",
+        }
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+            index = (out / "index.html").read_text(encoding="utf-8")
+        self.assertIn('href="/item/bv1.html#en"', index)
+        self.assertNotIn('href="/item/bv1.html#zh"', index)
 
     def test_x_article_detail_stays_article(self):
         item = {

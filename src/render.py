@@ -795,7 +795,7 @@ def _render_home(items, _descriptions, _methods, interactions, out):
     def _home_href(it):
         href, is_ext = _item_href(it, interactions)
         if not is_ext and _has_zh_deep(it):
-            href += "#en" if (it.get("category") == "视频" and (it.get("summary_md") or "").strip()) else "#zh"
+            href += "#en" if it.get("category") == "视频" else "#zh"
         return href, (' target="_blank" rel="noopener"' if is_ext else "")
 
     def _poster_word(it):
@@ -975,21 +975,26 @@ def _youtube_embed(url, src="", item=None):
     vid = _yt_id(url)
     if not vid:
         return ""
+    cover = _item_cover(item) if item else ""
+    if not cover:
+        cover = _yt_thumb_url(vid)
     pub = ""
     if item:
         dt = _effective_dt(item)
         if dt and dt != _MIN_DT:
             pub = dt.strftime("%Y-%m-%d")
-    return _facade(_yt_thumb_url(vid), src, "YouTube", f'data-yt="{vid}"', published=pub)
+    return _facade(cover, src, "YouTube", f'data-yt="{vid}"', published=pub)
 
 
 def _bili_embed(bili_url, yt_url, src="", item=None):
-    """B站门面(中文翻译搬运):用 YouTube 同片封面 + 哔哩哔哩角标;点击挂 player.bilibili.com。无 BV → ""。"""
+    """B站门面(中文翻译搬运):优先用条目封面;点击挂 player.bilibili.com。无 BV → ""。"""
     bv = _bili_bv(bili_url)
     if not bv:
         return ""
     vid = _yt_id(yt_url)
-    cover = _yt_thumb_url(vid) if vid else ""
+    cover = _item_cover(item) if item else ""
+    if not cover:
+        cover = _yt_thumb_url(vid) if vid else ""
     cid = re.search(r"cid=(\d+)", bili_url or "")  # publish_item.py 取自 B站 API,有则更可靠加载
     data = f'data-bv="{bv}"' + (f' data-cid="{cid.group(1)}"' if cid else "")
     pub = ""
