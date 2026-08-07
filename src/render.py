@@ -171,12 +171,14 @@ a:focus-visible,button:focus-visible,input:focus-visible,.art-card:focus-visible
 
 _HOME_CSS = """
 .wrap{max-width:var(--maxw);margin:0 auto;padding:34px 24px 72px}
-.home-hero{padding:34px 0 26px;max-width:860px}
-.home-eyebrow{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);margin-bottom:14px}
-.home-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
-.home-title{font-family:var(--sans);font-weight:760;font-size:52px;line-height:1.05;letter-spacing:0;text-wrap:balance}
-.home-title .em{color:var(--accent-2)}
-.home-tagline{margin-top:12px;color:var(--muted);font-size:15px;line-height:1.6}
+.home-hero{padding:44px 0 34px;max-width:1020px}
+.home-eyebrow{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:20px}
+.home-eyebrow::before{content:"";width:28px;height:1px;background:var(--accent)}
+.home-title{font-family:var(--serif);font-weight:600;font-size:68px;line-height:1.06;letter-spacing:0;text-wrap:balance}
+.home-title .em{display:block}
+.home-title strong{font-weight:inherit;color:var(--accent-2)}
+.mobile-break{display:none}
+.home-tagline{max-width:570px;margin-top:22px;color:var(--fg-2);font-size:16px;line-height:1.7;text-wrap:pretty}
 .sec{margin-bottom:42px}
 .sec-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
 .sec-row::after{content:"";height:1px;flex:1;background:var(--border)}
@@ -226,14 +228,14 @@ _HOME_CSS = """
 .card-foot{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:11px;color:var(--faint)}
 .tag-list{display:flex;flex-wrap:wrap;gap:6px}
 .tag-chip{display:inline-flex;align-items:center;border:1px solid var(--border);background:var(--surface-2);border-radius:6px;padding:2px 7px;color:var(--muted);font-family:var(--mono);font-size:10.5px}
-@media(max-width:920px){.pick-banner,.pick-banner.fit-wide{grid-template-columns:1fr;min-height:0}
+@media(max-width:920px){.home-title{font-size:58px}.pick-banner,.pick-banner.fit-wide{grid-template-columns:1fr;min-height:0}
   .pick-cover,.pick-cover.fit-wide.has-img{min-height:0;aspect-ratio:16/9}.pick-body{border-left:0;border-top:1px solid var(--border);padding:30px}
   .pick-banner::after{top:calc(56.25vw + 22px)}
 }
 @media(max-width:880px){.art-grid{grid-template-columns:repeat(2,1fr)}
   .art-grid.single .art-card{display:flex}.art-grid.single .card-cover{height:auto;min-height:0;aspect-ratio:16/9}
 }
-@media(max-width:560px){.wrap{padding:20px 16px 52px}.home-hero{padding:24px 0 22px}.home-title{font-size:35px}.home-title .em{display:block}.home-tagline{font-size:14px}
+@media(max-width:560px){.wrap{padding:20px 16px 52px}.home-hero{padding:30px 0 28px}.home-eyebrow{margin-bottom:16px}.home-title{font-size:40px;line-height:1.1}.mobile-break{display:block}.home-tagline{margin-top:18px;font-size:14.5px;line-height:1.65}
   .filters{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:22px;padding-bottom:4px;scrollbar-width:none}.filters::-webkit-scrollbar{display:none}
   .pick-banner,.pick-banner.fit-wide{grid-template-columns:1fr}.pick-cover,.pick-cover.fit-wide.has-img{aspect-ratio:16/9}.pick-banner::after{font-size:48px;right:16px;top:calc(56.25vw + 18px)}.pick-body{padding:24px 22px 26px}.pick-title{font-size:25px}
   .art-grid{grid-template-columns:1fr}.card-body{min-height:210px}}
@@ -874,9 +876,9 @@ def _render_home(items, _descriptions, _methods, interactions, out):
 
     hero_html = (
         '<section class="home-hero">'
-        '<div class="home-eyebrow">Curated AI notes</div>'
-        '<h1 class="home-title">AI 精选，<span class="em">读到有收获。</span></h1>'
-        '<p class="home-tagline">只放人工挑过的文章译文、视频/播客总结和译制内容。少一点噪音，多一点判断。</p>'
+        '<div class="home-eyebrow">AI Radar Editorial</div>'
+        '<h1 class="home-title">在 AI 的噪音里，<span class="em">只留下<br class="mobile-break"><strong>值得读完</strong>的。</span></h1>'
+        '<p class="home-tagline">人工挑选文章、视频与播客。翻译、梳理，也保留判断。</p>'
         '</section>')
 
     pick_html = ""
