@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import shutil
 import subprocess
 from html import escape as _escape, unescape as _unescape
 from pathlib import Path
@@ -11,6 +12,8 @@ import nh3
 _DIST = Path(__file__).resolve().parent.parent / "dist"
 DIST_IMG = _DIST / "img"
 _MAX_IMG_BYTES = 8_000_000
+_OPTIMIZE_MIN_BYTES = 250_000
+_LOCAL_IMG_URL = re.compile(r"/img/[A-Za-z0-9._/-]+")
 
 
 def sanitize(html):
@@ -48,6 +51,52 @@ def _is_image(data):
     return head[:4] == b"<svg" or (head[:5] == b"<?xml" and b"<svg" in head)
 
 
+def optimize_local_image(src):
+    """用本机 cwebp 压缩较大的站内 PNG/JPEG；工具不可用时保持原图。"""
+    if not (src or "").startswith("/img/"):
+        return src
+    name = src.removeprefix("/img/")
+    root = DIST_IMG.resolve()
+    path = (DIST_IMG / name).resolve()
+    if root not in path.parents:
+        return src
+    if path.suffix.lower() not in {".png", ".jpg", ".jpeg"} or not path.is_file():
+        return src
+    try:
+        if path.stat().st_size < _OPTIMIZE_MIN_BYTES:
+            return src
+    except OSError:
+        return src
+    cwebp = shutil.which("cwebp")
+    if not cwebp:
+        return src
+    out = path.with_suffix(".webp")
+    try:
+        if out.is_file() and out.stat().st_mtime >= path.stat().st_mtime and out.stat().st_size < path.stat().st_size:
+            return "/img/" + out.relative_to(root).as_posix()
+    except OSError:
+        pass
+    tmp = out.with_name(out.name + ".tmp")
+    try:
+        result = subprocess.run(
+            [cwebp, "-quiet", "-q", "84", "-m", "6", "-sharp_yuv", str(path), "-o", str(tmp)],
+            capture_output=True,
+            timeout=45,
+        )
+        if result.returncode == 0 and tmp.is_file() and tmp.stat().st_size < path.stat().st_size:
+            tmp.replace(out)
+            return "/img/" + out.relative_to(root).as_posix()
+    except Exception:
+        pass
+    finally:
+        tmp.unlink(missing_ok=True)
+    return src
+
+
+def optimize_markdown_images(md):
+    return _LOCAL_IMG_URL.sub(lambda m: optimize_local_image(m.group(0)), md or "")
+
+
 def _download_image(url, max_time=20, timeout=25):
     url = _unescape(url)
     max_time = max(1, int(max_time))
@@ -79,7 +128,7 @@ def _download_image(url, max_time=20, timeout=25):
     path = DIST_IMG / name
     if not path.exists():
         path.write_bytes(data)
-    return f"/img/{name}"
+    return optimize_local_image(f"/img/{name}")
 
 
 def localize_images(html):
