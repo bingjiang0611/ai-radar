@@ -91,6 +91,26 @@ class TestContent(unittest.TestCase):
             finally:
                 content.DIST_IMG = old_dist_img
 
+    def test_large_local_image_is_optimized_for_markdown(self):
+        old_dist_img = content.DIST_IMG
+        with TemporaryDirectory() as td:
+            content.DIST_IMG = Path(td)
+            source = content.DIST_IMG / "cover.png"
+            source.write_bytes(b"x" * 300_000)
+
+            def fake_cwebp(args, **_kwargs):
+                Path(args[-1]).write_bytes(b"webp")
+                return mock.Mock(returncode=0)
+
+            try:
+                with mock.patch.object(content.shutil, "which", return_value="/usr/bin/cwebp"), \
+                     mock.patch.object(content.subprocess, "run", side_effect=fake_cwebp):
+                    out = content.optimize_markdown_images("![cover](/img/cover.png)")
+                self.assertEqual(out, "![cover](/img/cover.webp)")
+                self.assertTrue((content.DIST_IMG / "cover.webp").exists())
+            finally:
+                content.DIST_IMG = old_dist_img
+
 
 class TestStore(unittest.TestCase):
     def setUp(self):
@@ -233,13 +253,33 @@ class TestPublishItem(unittest.TestCase):
                 item_dir = publish_item.ROOT / "dist" / "item"
                 item_dir.mkdir(parents=True)
                 (publish_item.ROOT / "dist" / "index.html").write_text(
-                    '<a class="pick-banner c-video" href="/item/xh1.html#en">'
+                    '<a class="pick-banner c-video" data-cat="视频" href="/item/xh1.html#en">'
                     '<div class="pick-cover poster c-video"></div></a>',
                     encoding="utf-8",
                 )
                 (item_dir / "xh1.html").write_text('<blockquote class="twitter-tweet"></blockquote>', encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "X 视频首页卡片缺封面"):
                     publish_item.validate_dist("xh1")
+            finally:
+                publish_item.ROOT = old_root
+
+    def test_validate_dist_allows_article_with_shared_twitter_styles(self):
+        old_root = publish_item.ROOT
+        with TemporaryDirectory() as td:
+            try:
+                publish_item.ROOT = Path(td)
+                item_dir = publish_item.ROOT / "dist" / "item"
+                item_dir.mkdir(parents=True)
+                (publish_item.ROOT / "dist" / "index.html").write_text(
+                    '<a class="pick-banner c-research" data-cat="文章" href="/item/a1.html#zh">'
+                    '<div class="pick-cover has-img c-research"></div></a>',
+                    encoding="utf-8",
+                )
+                (item_dir / "a1.html").write_text(
+                    '<style>.x-embed .twitter-tweet{margin:0 auto}</style>',
+                    encoding="utf-8",
+                )
+                publish_item.validate_dist("a1")
             finally:
                 publish_item.ROOT = old_root
 
@@ -424,8 +464,9 @@ class TestRender(unittest.TestCase):
                     "video_url": "",
                     "tweet_meta": '{"cover": "/img/wide.png"}',
                 }
+                item2 = dict(item, hash="wide2", url="https://example.com/wide-2", title="Wide cover 2")
                 out = root / "out"
-                render.render_site([item], interactions={"user-curated": "detail"}, out_dir=out)
+                render.render_site([item, item2], interactions={"user-curated": "detail"}, out_dir=out)
                 index = (out / "index.html").read_text(encoding="utf-8")
             finally:
                 render.DIST = old_render_dist
@@ -434,6 +475,8 @@ class TestRender(unittest.TestCase):
         self.assertIn("pick-banner fit-wide", index)
         self.assertIn("pick-cover has-img fit-contain fit-wide", index)
         self.assertIn("--cover-aspect:3.000;", index)
+        self.assertIn('<img class="cover-img" src="/img/wide.png" alt="" fetchpriority="high" decoding="async">', index)
+        self.assertIn('<img class="cover-img" src="/img/wide.png" alt="" loading="lazy" decoding="async">', index)
 
     def test_render_site_outputs_only_overview_and_details(self):
         item = {

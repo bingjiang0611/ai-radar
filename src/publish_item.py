@@ -39,7 +39,7 @@ def _read_md(path):
     md = re.sub(r"\A---\n.*?\n---\n", "", md, count=1, flags=re.S).strip()
     if "![[" in md:
         raise ValueError("Markdown 里还有 Obsidian ![[...]] 图片嵌入；先转成 ![](/img/...) 或删掉再发布")
-    return md
+    return content.optimize_markdown_images(md)
 
 
 def _title_from_md(md):
@@ -134,6 +134,7 @@ def publish(args, conn=None):
     translation_md = _read_md(args.translation)
     summary_md = _read_md(args.summary)
     content_md = _read_md(args.content)
+    args.cover = content.optimize_local_image(args.cover)
     bili = _stored_bili_url(args.bili or "")
     if not (translation_md or summary_md or bili):
         raise ValueError("至少提供一个内容载荷：--translation、--summary 或 --bili")
@@ -212,7 +213,8 @@ def validate_dist(item_hash):
         rf'<a\b[^>]*href="/item/{re.escape(item_hash)}\.html#[^"]+"[\s\S]*?</a>',
         text,
     )
-    if card and "twitter-tweet" in detail_text and "has-img" not in card.group(0):
+    if (card and 'data-cat="视频"' in card.group(0)
+            and "twitter-tweet" in detail_text and "has-img" not in card.group(0)):
         raise RuntimeError("X 视频首页卡片缺封面: 渲染成了 poster fallback")
 
 

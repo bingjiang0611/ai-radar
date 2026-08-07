@@ -190,9 +190,8 @@ _HOME_CSS = """
 .pick-banner:hover{border-color:var(--accent-line);box-shadow:0 16px 40px -22px color-mix(in oklch,var(--accent) 42%,transparent)}
 .pick-banner::after{content:attr(data-word);position:absolute;right:28px;top:18px;font-family:var(--mono);font-weight:800;font-size:76px;line-height:1;letter-spacing:0;color:color-mix(in oklch,var(--cat,var(--accent)) 22%,transparent);pointer-events:none;z-index:1}
 .pick-cover{position:relative;min-height:0;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 18%,var(--surface-2)),var(--inset));background-size:cover;background-position:center;overflow:hidden}
-.pick-cover.has-img{background-image:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08)),var(--cover-img)}
-.pick-cover.fit-contain.has-img{background-color:var(--inset);background-size:auto,contain;background-repeat:no-repeat;background-position:center}
-.pick-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4);background-size:auto,cover}
+.pick-cover.has-img{background:var(--inset)}
+.pick-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4)}
 .pick-cover.poster{display:flex;align-items:flex-end;padding:28px;background:radial-gradient(130% 120% at 86% 8%,color-mix(in oklch,var(--cat,var(--accent)) 22%,var(--surface-2)),var(--inset)),repeating-linear-gradient(90deg,transparent 0 47px,color-mix(in oklch,var(--fg) 4%,transparent) 47px 48px)}
 .pick-body{padding:30px 38px 34px;background:var(--surface);border-top:1px solid var(--border)}
 .pick-meta,.art-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)}
@@ -209,9 +208,12 @@ _HOME_CSS = """
 .art-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--fg);box-shadow:var(--shadow);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
 .art-card:hover{transform:translateY(-2px);border-color:var(--accent-line);box-shadow:0 14px 36px -20px color-mix(in oklch,var(--accent) 42%,transparent)}
 .card-cover{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,color-mix(in oklch,var(--cat,var(--accent)) 18%,var(--surface-2)),var(--inset));overflow:hidden}
-.card-cover.has-img{background-image:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08)),var(--cover-img);background-size:cover;background-position:center}
-.card-cover.fit-contain.has-img{background-color:var(--inset);background-size:auto,contain;background-repeat:no-repeat;background-position:center}
-.card-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4);background-size:auto,cover}
+.card-cover.has-img{background:var(--inset)}
+.card-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4)}
+.cover-img{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover}
+.fit-contain .cover-img{object-fit:contain}
+.fit-wide .cover-img{object-fit:cover}
+.pick-cover.has-img::after,.card-cover.has-img::after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08));pointer-events:none}
 .card-cover.poster{display:flex;align-items:flex-end;padding:18px;background:radial-gradient(130% 120% at 85% 10%,color-mix(in oklch,var(--cat,var(--accent)) 22%,var(--surface-2)),var(--inset)),repeating-linear-gradient(90deg,transparent 0 31px,color-mix(in oklch,var(--fg) 4%,transparent) 31px 32px)}
 .poster-word{position:absolute;right:16px;bottom:12px;z-index:0;font-family:var(--mono);font-size:46px;font-weight:800;line-height:.9;color:color-mix(in oklch,var(--cat,var(--accent)) 26%,transparent);letter-spacing:.04em;text-transform:uppercase}
 .poster-title{position:relative;z-index:1;font-family:var(--sans);font-size:20px;font-weight:760;line-height:1.2;letter-spacing:-.01em;color:var(--fg);max-width:13ch;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -471,12 +473,16 @@ def _img_have():
     """dist/img 现存文件名集合(每次渲染进程缓存一次)。"""
     if _img_have_cache[0] is None:
         from content import DIST_IMG
-        _img_have_cache[0] = {p.name for p in DIST_IMG.iterdir()} if DIST_IMG.exists() else set()
+        _img_have_cache[0] = {
+            str(p.relative_to(DIST_IMG)).replace("\\", "/")
+            for p in DIST_IMG.rglob("*")
+            if p.is_file()
+        } if DIST_IMG.exists() else set()
     return _img_have_cache[0]
 
 
 def _lazy_imgs(html_str):
-    """给正文/推文配图的 <img> 补 loading="lazy"(隐藏/未滚到视口不下载);
+    """给正文/推文配图补原生懒加载和异步解码(隐藏/未滚到视口不下载);
     并**丢弃 /img 文件已不在站的 <img>**——避免破图图标(图若丢失则优雅地不显示,而非裂图)。"""
     if not html_str:
         return html_str
@@ -487,7 +493,11 @@ def _lazy_imgs(html_str):
         loc = _IMG_LOCAL.search(tag)
         if loc and loc.group(1) not in have:
             return ""  # 站内图文件缺失 → 不渲染该 <img>(无破图)
-        return tag if "loading=" in tag else tag.replace("<img", '<img loading="lazy"', 1)
+        if "loading=" not in tag:
+            tag = tag.replace("<img", '<img loading="lazy"', 1)
+        if "decoding=" not in tag:
+            tag = tag.replace("<img", '<img decoding="async"', 1)
+        return tag
 
     return _IMG_TAG.sub(repl, html_str)
 
@@ -693,11 +703,6 @@ def _deep_kind(item):
     return item.get("category") or "精选"
 
 
-def _cover_style(cover, layout_style):
-    safe = _e((cover or "").replace("'", "%27"))
-    return f"--cover-img:url('{safe}');{layout_style}"
-
-
 def _excerpt(item, limit=118):
     text = (item.get("summary_zh") or item.get("summary") or "").strip()
     if not text:
@@ -814,7 +819,9 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         badge = _e(kind)
         if cover:
             fit, layout_style, _banner_fit = _cover_layout(it, cover)
-            return (f'<div class="card-cover has-img{fit} {cat_cls}" style="{_cover_style(cover, layout_style)}">'
+            style = f' style="{layout_style}"' if layout_style else ""
+            return (f'<div class="card-cover has-img{fit} {cat_cls}"{style}>'
+                    f'<img class="cover-img" src="{_e(cover)}" alt="" loading="lazy" decoding="async">'
                     f'<span class="cover-badge">{badge}</span></div>')
         title = it.get("title_zh") or it.get("title") or ""
         first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:42] or "AI")
@@ -828,7 +835,9 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         cover = cover if cover is not None else _item_cover(it)
         if cover:
             fit, layout_style, _banner_fit = _cover_layout(it, cover)
-            return (f'<div class="pick-cover has-img{fit} {cat_cls}" style="{_cover_style(cover, layout_style)}">'
+            style = f' style="{layout_style}"' if layout_style else ""
+            return (f'<div class="pick-cover has-img{fit} {cat_cls}"{style}>'
+                    f'<img class="cover-img" src="{_e(cover)}" alt="" fetchpriority="high" decoding="async">'
                     f'<span class="cover-badge">{kind}</span></div>')
         title = it.get("title_zh") or it.get("title") or ""
         first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:60] or "AI")
@@ -961,7 +970,7 @@ def _facade(cover, src, badge, data_attr, hint="点击播放", duration="", publ
     dur_html = f'<span class="dur">{_e(duration)}</span>' if duration else ""
     pub_html = f'<span class="pub">{_e(published)}</span>' if published else ""
     return (f'<div class="facade" {data_attr}>'
-            f'<img class="thumb" src="{cover}" alt="" fetchpriority="high">'
+            f'<img class="thumb" src="{cover}" alt="" fetchpriority="high" decoding="async">'
             f'<div class="hint">{hint}</div>'
             f'{pub_html}{dur_html}'
             f'<div class="play"><span class="pbtn">{_PLAY_SVG}</span></div>'
