@@ -1,0 +1,5 @@
+[
+  {"id": 1, "prompt": "刷新一下 radar,把今天的新内容拉进来", "expected": "说明 ai-radar 已停止 RSS、X、官博客批量采集；请用户提供需要发布的精选内容，或改用 publish_item.py 发布单条内容。"},
+  {"id": 2, "prompt": "这篇文章我想要中文全文翻译,传上去 http://localhost:8787/item/<hash>.html", "expected": "走动作 C:取原文(给出 sqlite/python 取 content_html 的命令)→ Claude 翻成中文 markdown(只译正文、剔除版权/作者 bio/相关文章 chrome,保留小标题与对话体讲话人名)→ set_translation.py <hash> /tmp/zh.md → run.py --render-only;详情页「中文翻译」tab 从空态变译文。"},
+  {"id": 3, "prompt": "部署上线给同事看", "expected": "走动作 D:🔴 确认是外向动作(本条已是明确指令)→ 用 npx wrangler(全局装会 EACCES)→ whoami 确认登录(未登录让用户自己 npx wrangler login,不替登)→ project ai-radar 已存在不重复 create → npx wrangler pages deploy ./dist --project-name ai-radar --branch main → 回报 https://ai-radar-do7.pages.dev。"}
+]

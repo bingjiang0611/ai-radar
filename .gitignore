@@ -1,6 +1,9 @@
 # 工具配置不入 git（A1 守卫）
 CLAUDE.md
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/ai-radar/
 
 # 运行产物
 data/*.db*
