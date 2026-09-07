@@ -2,7 +2,7 @@
 name: ai-radar
 description: >
   运营 ai-radar 个人精选 AI 内容站。用户给文章译文、YouTube/播客/视频总结、单条公开 X 视频、
-  B站译制链接或对应 markdown 文件时，Codex 把这条精选内容发布到站点并按需部署。
+  B站译制链接、Etch 当前已有成果或对应 markdown 文件时，Codex 把这条精选内容发布到站点并按需部署。
   不要抓 RSS、X/Twitter、官博客或任何批量来源。Use when the user says 上传到 radar / 发布 radar / 部署 radar /
   翻译这篇上传 / 上传总结 / 挂 B站链接 / 运营 ai-radar。
 ---
@@ -20,6 +20,7 @@ ai-radar 是人工精选内容发布器：
 - `.venv/bin/python src/run.py` 只 render 当前精选库，不访问外部源。
 - 精选内容有 `translation_md` / `summary_md` / B站 `video_url` 时不会被 7 天 retention 删除。
 - 部署是真实公开发布；只有用户这次明确要“部署/上线/发布”时才加 `--deploy` 或手动跑 wrangler。
+- Etch 等内容工具一律视为只读来源：只使用任务当前已经完成、可读取的成果；禁止点击“追加总结 / 生成 / 重新生成 / 翻译 / 配图”等按钮，禁止为了发布启动或等待新的内容处理。
 
 ## 输入要求
 
@@ -32,6 +33,14 @@ ai-radar 是人工精选内容发布器：
   - `--translation <file.md>`：文章全文中文翻译。
   - `--summary <file.md>`：视频/播客/文章中文总结。
   - `--bili <url>`：B站译制视频链接。
+
+### Etch 当前成果
+
+用户说“部署 Etch 中这个内容”时：
+
+- 读取当前已有的标题、来源 URL、已完成 markdown、B站链接或封面；状态为 `running` / `pending` / `checkpoint` 的阶段不推进、不等待。
+- 允许做发布必需的机械整理，例如移除尚未生成的图片占位、规范 markdown 和复制已经存在的本地图；不得扩写、重写或另行生成正文、翻译、总结与配图。
+- 当前成果已满足 `publish_item.py` 的载荷要求就直接发布；不满足时明确列出缺失项并停止，请用户先在来源工具中完成，不能擅自补跑流程。
 
 如果用户给的是 Obsidian 文件路径，先读文件。YAML frontmatter 会由脚本剥掉；但发布前必须处理这些 Obsidian/本地格式：
 
