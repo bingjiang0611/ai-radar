@@ -57,3 +57,11 @@ python3 -m http.server -d dist 8787
 ```
 
 `src/run.py` 只渲染当前 SQLite 里的精选内容，不抓取外部源。
+
+## MiniMind 互动教程
+
+线上入口：<https://ai-radar-do7.pages.dev/minimind/>，也可从首页导航的「互动教程」进入。
+
+`static/minimind/` 保存独立 `minimind-lab` 项目的生产构建快照；所有渲染入口都会把它挂载到 `dist/minimind/`，不会覆盖首页、文章或图片。普通内容发布不需要安装 Node.js 或依赖相邻源码目录。
+
+教程更新、验证与部署步骤见 [docs/minimind.md](docs/minimind.md)。

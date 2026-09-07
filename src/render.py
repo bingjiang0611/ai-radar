@@ -19,6 +19,7 @@ _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|y
 _X_STATUS_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]{1,20})/status(?:es)?/(\d+)")
 
 DIST = Path(__file__).resolve().parent.parent / "dist"
+MINIMIND = Path(__file__).resolve().parent.parent / "static" / "minimind"
 
 # 分类 → CSS 类（提供 --cat 色）+ 英文副名 + 排序
 _CAT_CLASS = {
@@ -762,7 +763,8 @@ def _top_header(active, stat="", search_ph="搜索…"):
     stat_html = f'<span class="stat">{_e(stat)}</span>' if stat else ""
     return (f'<header class="top"><div class="top-in">'
             f'<a href="/" class="brand" aria-label="AI Radar">{_BRAND_SVG}<span>AI&nbsp;Radar</span></a>'
-            f'<nav class="nav"><a href="/"{home_cls}>总览</a></nav>'
+            f'<nav class="nav"><a href="/"{home_cls}>总览</a>'
+            f'<a href="/minimind/">互动教程</a></nav>'
             f'{stat_html}'
             f'<div class="top-right"><div class="search">{_SEARCH_SVG}'
             f'<input id="search" type="search" placeholder="{_e(search_ph)}" aria-label="{_e(search_ph)}" autocomplete="off"></div>'
@@ -1278,13 +1280,18 @@ def _render_detail(item, out, descriptions):
 
 
 def render_site(items, interactions=None, descriptions=None, icons=None, out_dir=None, methods=None):
-    """Render overview plus detail pages."""
+    """Render overview, detail pages, and the versioned MiniMind static app."""
     global _ICONS
     interactions = interactions or {}
     descriptions = descriptions or {}
     _ICONS = icons or {}
     _img_have_cache[0] = None  # 每次渲染重读 dist/img(丢图防御按当前文件状态判定)
     out = Path(out_dir) if out_dir else DIST
+    # Keep the tutorial in every publish path, including publish_item.py.
+    # Source is versioned separately from generated dist; never overwrite the home page.
+    if not (MINIMIND / "index.html").is_file():
+        raise FileNotFoundError(f"MiniMind build missing: {MINIMIND / 'index.html'}")
+    shutil.copytree(MINIMIND, out / "minimind", dirs_exist_ok=True)
     shutil.rmtree(out / "item", ignore_errors=True)
     (out / "item").mkdir(parents=True, exist_ok=True)
     (out / "sources.html").unlink(missing_ok=True)
@@ -1296,7 +1303,8 @@ def render_site(items, interactions=None, descriptions=None, icons=None, out_dir
             _render_detail(it, out, descriptions)
     # Cloudflare Pages 缓存策略：进站图按内容寻址、几乎不变 → 长缓存；HTML 留默认。
     (out / "_headers").write_text(
-        "/img/*\n  Cache-Control: public, max-age=604800\n",
+        "/img/*\n  Cache-Control: public, max-age=604800\n"
+        "/minimind/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n",
         encoding="utf-8",
     )
     return out / "index.html"
