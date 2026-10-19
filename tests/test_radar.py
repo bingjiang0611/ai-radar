@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -45,6 +46,37 @@ class TestContent(unittest.TestCase):
         self.assertIn("<img", out)
         self.assertNotIn("<script", out)
 
+    def test_generated_links_are_sanitized(self):
+        class Links(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "a":
+                    self.links.append(dict(attrs))
+
+        for convert in (content.sanitize, content.normalize_article_html, content.md_to_html):
+            for source in (
+                '[click](javascript:alert`1`)',
+                '[click](https://example.com/"onmouseover="alert`1`)',
+            ):
+                with self.subTest(convert=convert.__name__, source=source):
+                    parser = Links()
+                    parser.feed(convert(source))
+                    self.assertEqual(len(parser.links), 1)
+                    attrs = parser.links[0]
+                    self.assertFalse(attrs.get("href", "").lower().startswith("javascript:"))
+                    self.assertNotIn("onmouseover", attrs)
+
+    def test_sanitized_math_keeps_layout_and_accessibility(self):
+        out = content.sanitize(r'<p>$$ \frac{x}{y} $$</p>')
+        self.assertIn('class="math-block"', out)
+        self.assertIn('class="math-frac"', out)
+        self.assertIn('role="math"', out)
+        self.assertIn('aria-label="', out)
+        self.assertNotIn("$$", out)
+
     def test_localize_rewrites_http_src(self):
         with mock.patch.object(content, "_download_image", return_value="/img/deadbeef.png"):
             out = content.localize_images('<img src="https://a/b.png" alt="x">')
@@ -55,7 +87,7 @@ class TestContent(unittest.TestCase):
         out = content.md_to_html("# H1\n\npara **bold** and [lk](https://x.com)\n\n- a\n\n> q\n\n<script>")
         self.assertIn("<h1>H1</h1>", out)
         self.assertIn("<strong>bold</strong>", out)
-        self.assertIn('<a href="https://x.com">lk</a>', out)
+        self.assertIn('<a href="https://x.com" rel="noopener noreferrer">lk</a>', out)
         self.assertIn("<li>a</li>", out)
         self.assertIn("<blockquote>q</blockquote>", out)
         self.assertIn("&lt;script&gt;", out)
@@ -72,8 +104,40 @@ class TestContent(unittest.TestCase):
         self.assertIn("<th>路线</th>", out)
         self.assertIn("<td>ACE</td>", out)
         self.assertIn("<strong>中到高</strong>", out)
-        self.assertIn('<a href="https://example.com">paper</a>', out)
+        self.assertIn('<a href="https://example.com" rel="noopener noreferrer">paper</a>', out)
         self.assertNotIn("<p>| 路线", out)
+
+    def test_md_to_html_repairs_etch_footnotes(self):
+        out = content.md_to_html(
+            "正文<sup>1</sup>\n\n* * *\n\n"
+            "1. 注释一 [↩](https://example.com/#one \"返回\")\n\n"
+            "2. 注释二 [↩](https://example.com/#two \"返回\")"
+        )
+        self.assertIn("正文<sup>1</sup>", out)
+        self.assertIn("<hr>", out)
+        self.assertEqual(out.count("<ol>"), 1)
+        self.assertIn('<a href="https://example.com/#one" rel="noopener noreferrer">↩</a>', out)
+
+    def test_md_to_html_renders_display_math(self):
+        out = content.md_to_html(
+            r"$$ \\mathrm{Verbosity}=\\frac{|x\\cup y|}{\\mathrm{LOC}} $$"
+        )
+        self.assertIn('class="math-block"', out)
+        self.assertIn('class="math-frac"', out)
+        self.assertIn("∪", out)
+        self.assertNotIn("$$", out)
+
+    def test_normalize_article_html_repairs_escaped_sup_and_math(self):
+        out = content.normalize_article_html(
+            r'<p>x&lt;sup&gt;<a href="#n">1</a>&lt;/sup&gt;</p><p>$$ \\sqrt{x} $$</p>'
+            r'<ol><li>* *</li></ol><ol><li>one [↩](https://example.com/#one "back")</li></ol>'
+            r'<ol><li>two</li></ol>'
+        )
+        self.assertIn('<sup><a href="#n" rel="noopener noreferrer">1</a></sup>', out)
+        self.assertIn('class="math-root"', out)
+        self.assertIn('<hr><ol>', out)
+        self.assertEqual(out.count('<ol>'), 1)
+        self.assertIn('<a href="https://example.com/#one" rel="noopener noreferrer">↩</a>', out)
 
     def test_download_image_accepts_short_timeouts(self):
         old_dist_img = content.DIST_IMG

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from store import _parse_dt  # 统一时间解析(兼容 ISO 与 RFC822 pubDate)
-from content import md_to_html  # 译文 translation_md(markdown)→ HTML
+from content import md_to_html, normalize_article_html  # 正文富文本与 Markdown 渲染
 
 # 从 youtube 链接抠 11 位 video id（watch?v= / youtu.be / embed / shorts）
 _YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([A-Za-z0-9_-]{11})")
@@ -271,6 +271,9 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(30px,3.4vw,46p
 .panel{display:none}.panel.on{display:block}
 .doc{font-family:var(--serif);font-size:var(--doc-size);line-height:1.78;color:var(--fg);margin-top:14px}
 .doc p{margin:1.05em 0}
+.doc sup,.doc sub{font-family:var(--sans);font-size:.68em;line-height:0;position:relative;vertical-align:baseline}
+.doc sup{top:-.55em}.doc sub{bottom:-.18em}
+.doc sup a{text-decoration:none;color:var(--accent-2);font-weight:700}
 .doc a{color:var(--accent-2);text-decoration:underline;text-underline-offset:2.5px;text-decoration-thickness:1px;text-decoration-color:var(--accent-line)}
 .doc a:hover{text-decoration-color:var(--accent-2)}
 .doc h1,.doc h2,.doc h3,.doc h4{font-family:var(--serif);font-weight:600;line-height:1.25;letter-spacing:-.01em;margin:1.7em 0 .5em}
@@ -296,6 +299,8 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(30px,3.4vw,46p
 .doc figcaption{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;margin-top:9px}
 .doc hr{border:0;text-align:center;margin:2.2em 0}
 .doc hr::before{content:"\\002731";color:var(--faint);font-size:14px;letter-spacing:.4em}
+.math-block{display:flex;justify-content:center;align-items:center;max-width:100%;margin:1.65em 0;padding:.35em 0;overflow-x:auto;color:var(--fg);font-family:"Times New Roman",var(--serif);font-size:1.12em;line-height:1.2;text-align:center}
+.math-expr{display:inline-flex;align-items:center;gap:.08em;white-space:nowrap}.math-roman{font-style:normal}.math-frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .15em}.math-frac>span:first-child{border-bottom:1px solid currentColor;padding:0 .25em .12em}.math-frac>span:last-child{padding:.12em .25em 0}.math-root{display:inline-flex;align-items:flex-start;font-size:1.12em}.math-root>span{border-top:1px solid currentColor;padding:.02em .12em 0}.math-expr sub,.math-expr sup{font-size:.65em;line-height:1;position:static;align-self:flex-end;margin-left:-.04em}.math-expr sup{align-self:flex-start}
 .doc .src-note{margin-top:2.4em;padding-top:1.2em;border-top:1px solid var(--border);font-family:var(--sans);font-size:13px;color:var(--muted)}
 .tr-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding:56px 24px;
   background:var(--surface-2);border:1px solid var(--border);border-radius:14px;margin-top:14px}
@@ -1096,7 +1101,7 @@ def _strip_doc_boilerplate(html_str):
 def _tabs(item):
     """文章态 tabs：原文 / 中文翻译或摘要。
     返回 (tabs_html, outline)。outline 优先取中文内容,无则取原文,从而 outline 内容与默认打开的 tab 一致。"""
-    content = _strip_doc_boilerplate(_lazy_imgs(item.get("content_html") or ""))
+    content = _strip_doc_boilerplate(_lazy_imgs(normalize_article_html(item.get("content_html") or "")))
     has_content = bool(content.strip())
     yuanwen = content or '<p style="color:var(--muted)">本条无正文,点上方「打开原文」查看。</p>'
     tmd = (item.get("translation_md") or "").strip()

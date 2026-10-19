@@ -16,8 +16,18 @@ _OPTIMIZE_MIN_BYTES = 250_000
 _LOCAL_IMG_URL = re.compile(r"/img/[A-Za-z0-9._/-]+")
 
 
+def _clean_html(html):
+    # Sanitize after markup generation, retaining only the layout/accessibility
+    # attributes used by our math and table renderers.
+    return nh3.clean(html, attributes={
+        **nh3.ALLOWED_ATTRIBUTES,
+        "div": {"class", "role", "aria-label"},
+        "span": {"class"},
+    })
+
+
 def sanitize(html):
-    return nh3.clean(html or "")
+    return normalize_article_html(html or "")
 
 
 def _guess_ext(url, data):
@@ -149,19 +159,103 @@ def process(html):
     return localize_images(sanitize(html))
 
 
-_MD_IMG = re.compile(r'!\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)')
-_MD_LINK = re.compile(r'\[([^\]]+)\]\((\S+?)(?:\s+"[^"]*")?\)')
+_MD_TITLE = r'(?:"[^"]*"|&quot;.*?&quot;)'
+_MD_IMG = re.compile(r'!\[([^\]]*)\]\((\S+?)(?:\s+' + _MD_TITLE + r')?\)')
+_MD_LINK = re.compile(r'\[([^\]]+)\]\((\S+?)(?:\s+' + _MD_TITLE + r')?\)')
 _MD_BOLD = re.compile(r"\*\*([^*]+)\*\*")
 _MD_CODE = re.compile(r"`([^`]+)`")
 _MD_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+_MD_HR = re.compile(r"^\s*(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$")
+_ENCODED_SCRIPT = re.compile(r"&lt;(/?)(sup|sub)&gt;", re.I)
+
+
+def _math_html(tex):
+    """Render the small, common TeX subset used in curated articles without JS."""
+    tex = tex.strip().replace(r"\left", "").replace(r"\right", "")
+
+    def group(s, pos):
+        if pos >= len(s) or s[pos] != "{":
+            return (s[pos:pos + 1], pos + 1)
+        depth = 1
+        start = pos + 1
+        pos += 1
+        while pos < len(s) and depth:
+            depth += (s[pos] == "{") - (s[pos] == "}")
+            pos += 1
+        return s[start:pos - 1], pos
+
+    def render(s):
+        parts, i = [], 0
+        commands = {"cup": "∪", "sum": "∑", "pm": "±", "times": "×", "cdot": "·"}
+        while i < len(s):
+            if s[i] == "\\":
+                m = re.match(r"\\([A-Za-z]+|[,;! ])", s[i:])
+                if not m:
+                    parts.append("\\")
+                    i += 1
+                    continue
+                cmd = m.group(1)
+                i += len(m.group(0))
+                if cmd in {"mathrm", "text", "operatorname"} and i < len(s) and s[i] == "{":
+                    value, i = group(s, i)
+                    parts.append('<span class="math-roman">' + render(value) + "</span>")
+                elif cmd == "frac" and i < len(s) and s[i] == "{":
+                    top, i = group(s, i)
+                    bottom, i = group(s, i)
+                    parts.append('<span class="math-frac"><span>' + render(top)
+                                 + '</span><span>' + render(bottom) + "</span></span>")
+                elif cmd == "sqrt" and i < len(s) and s[i] == "{":
+                    value, i = group(s, i)
+                    parts.append('<span class="math-root">√<span>' + render(value) + "</span></span>")
+                elif cmd in commands:
+                    parts.append(commands[cmd])
+                elif cmd in {",", ";", "!", " "}:
+                    parts.append(" ")
+                else:
+                    parts.append(_escape("\\" + cmd))
+                continue
+            if s[i] in "_^":
+                tag = "sub" if s[i] == "_" else "sup"
+                i += 1
+                value, i = group(s, i)
+                parts.append(f"<{tag}>" + render(value) + f"</{tag}>")
+                continue
+            parts.append(_escape(s[i]))
+            i += 1
+        return "".join(parts)
+
+    return (f'<div class="math-block" role="math" aria-label="{_escape(tex, quote=True)}">'
+            f'<span class="math-expr">{render(tex)}</span></div>')
+
+
+def normalize_article_html(html):
+    """Repair harmless rich-text markup escaped by upstream article extractors."""
+    if not html:
+        return ""
+    html = _ENCODED_SCRIPT.sub(lambda m: f"<{m.group(1)}{m.group(2).lower()}>", html)
+    html = re.sub(
+        r"(?is)<p>\s*\$\$(.*?)\$\$\s*</p>",
+        lambda m: _math_html(_unescape(m.group(1))),
+        html,
+    )
+    # Etch exports the footnote separator/list as isolated ordered lists and
+    # occasionally leaves the back-reference in Markdown syntax.
+    html = re.sub(r"(?is)<ol>\s*<li>\s*\*\s+\*\s*</li>\s*</ol>", "<hr>", html)
+    html = re.sub(r"(?is)</ol>\s*<ol>", "", html)
+    html = _MD_LINK.sub(r'<a href="\2">\1</a>', html)
+    return _clean_html(html)
 
 
 def _md_inline(text):
-    text = _escape(text)
+    # Entity decoding before escaping makes imported Markdown link titles usable,
+    # while the final escape still keeps arbitrary embedded HTML inert.
+    text = _escape(_unescape(text))
     text = _MD_IMG.sub(r'<img src="\2" alt="\1">', text)
     text = _MD_LINK.sub(r'<a href="\2">\1</a>', text)
     text = _MD_BOLD.sub(r"<strong>\1</strong>", text)
     text = _MD_CODE.sub(r"<code>\1</code>", text)
+    # Footnote markers exported by Etch are safe inline markup, not visible text.
+    text = _ENCODED_SCRIPT.sub(lambda m: f"<{m.group(1)}{m.group(2).lower()}>", text)
     return text
 
 
@@ -229,7 +323,16 @@ def md_to_html(md):
             continue
         if not line.strip():
             flush()
-            close_list()
+            # Markdown permits blank lines between list items. Keep the list
+            # open when the next non-empty line continues the same list type.
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            next_line = lines[j] if j < len(lines) else ""
+            continues = ((in_list == "ol" and re.match(r"\s*\d+\.\s+", next_line))
+                         or (in_list == "ul" and re.match(r"\s*[-*+]\s+", next_line)))
+            if not continues:
+                close_list()
             i += 1
             continue
         if "|" in line and i + 1 < len(lines) and _is_table_sep(lines[i + 1]):
@@ -245,6 +348,23 @@ def md_to_html(md):
                 out.append(table)
             else:
                 para.extend(r.strip() for r in rows)
+            continue
+        if _MD_HR.match(line):
+            flush()
+            close_list()
+            out.append("<hr>")
+            i += 1
+            continue
+        if line.strip().startswith("$$"):
+            flush()
+            close_list()
+            math = line.strip()[2:]
+            while "$$" not in math and i + 1 < len(lines):
+                i += 1
+                math += "\n" + lines[i]
+            math = math.rsplit("$$", 1)[0] if "$$" in math else math
+            out.append(_math_html(math))
+            i += 1
             continue
         h = re.match(r"(#{1,6})\s+(.*)", line)
         if h:
@@ -285,7 +405,7 @@ def md_to_html(md):
         i += 1
     flush()
     close_list()
-    return "\n".join(out)
+    return _clean_html("\n".join(out))
 
 
 def gc_images(html_blobs):
