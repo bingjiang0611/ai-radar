@@ -360,6 +360,18 @@ class TestPublishItem(unittest.TestCase):
 
 
 class TestRender(unittest.TestCase):
+    def test_translation_lead_h1_matching_title_is_stripped(self):
+        item = {"title": "How the Claude Code team does code review", "title_zh": "Claude Code 团队如何进行代码审查"}
+        html = content.md_to_html("# Claude Code 团队如何进行代码审查\n\n正文段落")
+        out = render._strip_dup_title(html, item)
+        self.assertNotIn("<h1", out)
+        self.assertIn("正文段落", out)
+
+    def test_translation_lead_h1_unrelated_is_kept(self):
+        item = {"title": "Some English title", "title_zh": ""}
+        html = content.md_to_html("# 另一个小标题\n\n正文段落")
+        self.assertIn("另一个小标题", render._strip_dup_title(html, item))
+
     def setUp(self):
         self._tmp_img_dir = TemporaryDirectory()
         self._old_dist_img = content.DIST_IMG

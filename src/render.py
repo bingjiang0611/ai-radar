@@ -1083,6 +1083,17 @@ _DOC_BOILER_HEADING = re.compile(
 _LEAD_H1 = re.compile(r"(?is)^\s*<h1[^>]*>.*?</h1>\s*")
 
 
+def _strip_dup_title(html_str, item):
+    """去掉译文开头与页面 h1 同名的标题，避免详情页标题重复、目录首项重复。"""
+    m = _LEAD_H1.match(html_str or "")
+    if not m:
+        return html_str
+    first = re.sub(r"<[^>]+>", "", m.group(0)).strip()
+    names = {(item.get(k) or "").strip() for k in ("title_zh", "title")}
+    names.discard("")
+    return html_str[m.end():] if first in names else html_str
+
+
 def _strip_doc_boilerplate(html_str):
     """渲染前清理直出正文里混入的源站边角料（只动渲染输出、不碰库）：
     ① 去掉开头与页面标题重复的 <h1>（正文不该有自己的 h1，页面已有 h1.title）；
@@ -1108,9 +1119,9 @@ def _tabs(item):
     smd = (item.get("summary_md") or "").strip()
     has_zh = bool(tmd or smd)
     if tmd:
-        zh, zh_cls, zh_label = _lazy_imgs(md_to_html(tmd)), "panel doc", "中文翻译"
+        zh, zh_cls, zh_label = _lazy_imgs(_strip_dup_title(md_to_html(tmd), item)), "panel doc", "中文翻译"
     elif smd:
-        zh, zh_cls, zh_label = _lazy_imgs(md_to_html(smd)), "panel doc", "中文摘要"
+        zh, zh_cls, zh_label = _lazy_imgs(_strip_dup_title(md_to_html(smd), item)), "panel doc", "中文摘要"
     else:
         zh, zh_cls, zh_label = "", "", ""
     outline, seen = [], set()
