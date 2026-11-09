@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from html import unescape as html_unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -628,6 +629,24 @@ class TestRender(unittest.TestCase):
         self.assertIn("AI Radar · 人工精选", index)
         self.assertIn('再<br class="mobile-break"><strong>推荐给你</strong></span>', index)
         self.assertIn("文章、视频和播客，由我挑选。附上中文译文或总结，也保留原文链接。", index)
+
+    def test_poster_fallback_shows_source_not_duplicate_title(self):
+        item = {"hash": "p1", "source_id": "user-curated", "source_label": "Simon Willison", "category": "文章",
+                "title": "T", "title_zh": "独一无二的卡片标题", "url": "https://example.com/p1",
+                "fetched_at": datetime.now(timezone.utc).isoformat(), "summary_md": "## 要点\n\n正文"}
+        lead = dict(item, hash="p0", url="https://example.com/p0", title_zh="头条")
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site([lead, item], out_dir=out)
+            index = (out / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<span class="poster-src">Simon Willison</span>', index)
+        self.assertEqual(index.count(">独一无二的卡片标题<"), 1)
+        self.assertIn('class="tag-list card-kicker"', index)
+
+    def test_contain_cover_backdrop_url_cannot_escape_css_string(self):
+        style = render._cover_style(" fit-contain", "", 'https://e.com/a.png");background:red;x:("')
+        self.assertNotIn('"', html_unescape(style.split('style="', 1)[1].rsplit('"', 1)[0]).replace('url("', "").replace('")', ""))
+        self.assertEqual(render._cover_style("", "", "https://e.com/a.png"), "")
 
     def test_card_cover_uses_article_contain_and_video_cover(self):
         self.assertEqual(

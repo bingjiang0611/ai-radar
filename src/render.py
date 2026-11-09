@@ -153,7 +153,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,.art-card:focus-visible
 .icon-btn:hover{border-color:var(--border-2);color:var(--fg)}
 .icon-btn svg{width:16px;height:16px}
 [data-theme="light"] .moon{display:none}[data-theme="dark"] .sun{display:none}
-.foot{max-width:var(--maxw);margin:0 auto;padding:24px 24px 40px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+.foot{width:calc(100% - 48px);max-width:calc(var(--maxw) - 48px);margin:0 auto;padding:24px 0 40px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;
   border-top:1px solid var(--border);font-family:var(--mono);font-size:12px;color:var(--muted)}
 .foot .sep{opacity:.5}
 .empty{display:none;text-align:center;color:var(--muted);font-size:14px;padding:56px 0}
@@ -191,16 +191,23 @@ _HOME_CSS = """
 .pick-banner:hover{border-color:var(--accent-line)}
 .pick-cover{position:relative;min-height:432px;background:var(--inset);background-size:cover;background-position:center;overflow:hidden}
 .pick-cover.has-img{background:var(--inset)}
+.pick-banner .cover-img,.art-card .cover-img{transition:transform .5s var(--ease)}
+.pick-banner:hover .cover-img,.art-card:hover .cover-img{transform:scale(1.025)}
 .pick-cover.fit-wide.has-img{aspect-ratio:auto}
-.pick-cover.poster{display:flex;align-items:flex-end;padding:32px;background:var(--surface-2)}
+.pick-cover.poster{display:flex;align-items:flex-end;padding:32px}
+.poster{background:repeating-radial-gradient(circle at 84% 26%,transparent 0 38px,color-mix(in oklch,var(--cat) 20%,transparent) 38px 39px),linear-gradient(135deg,color-mix(in oklch,var(--cat) 14%,var(--surface-2)),color-mix(in oklch,var(--cat) 4%,var(--surface-2)))}
+.poster-mark{position:relative;z-index:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.poster-src{font-family:var(--serif);font-size:24px;font-weight:600;line-height:1.2;color:color-mix(in oklch,var(--cat) 70%,var(--fg));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.poster-kind{font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pick-body{position:relative;z-index:2;display:flex;min-width:0;flex-direction:column;justify-content:flex-end;padding:40px 32px 32px;background:var(--surface);border-left:1px solid var(--border)}
 .pick-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--muted)}
 .pick-meta span+span::before,.tag-list span+span::before{content:"·";margin-right:8px;color:var(--muted)}
 .pill{display:inline-flex;align-items:center;color:var(--muted)}
-.pill.strong{color:var(--accent-2);font-weight:500}
 .pick-title{font-family:var(--sans);font-weight:600;font-size:30px;line-height:1.2;letter-spacing:0;margin:20px 0 12px;text-wrap:balance;color:var(--fg)}
 .pick-dek{max-width:820px;color:var(--fg-2);font-size:16px;line-height:1.6}
-.pick-foot{margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pick-foot{margin-top:24px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pick-cta{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--accent-2);transition:transform .16s var(--ease)}
+.pick-banner:hover .pick-cta{transform:translateX(3px)}
 .art-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
 .art-grid.single{grid-template-columns:1fr}
 .art-grid.single .art-card{display:grid;grid-template-columns:minmax(260px,42%) minmax(0,1fr)}
@@ -210,31 +217,34 @@ _HOME_CSS = """
 .art-card:hover{transform:translateY(-2px);border-color:var(--accent-line)}
 .card-cover{position:relative;aspect-ratio:16/9;background:var(--inset);overflow:hidden}
 .card-cover.has-img{background:var(--inset)}
-.card-cover.fit-wide.has-img{aspect-ratio:var(--cover-aspect,2.4)}
-.cover-img{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover}
+.cover-img{position:absolute;inset:0;z-index:1;width:100%;height:100%;display:block;object-fit:cover}
+.fit-contain::before{content:"";position:absolute;inset:-24px;z-index:0;background:var(--cover-src) center/cover no-repeat;filter:blur(28px) saturate(1.2) brightness(.92);opacity:.9;transform:scale(1.08)}
 .fit-contain .cover-img{object-fit:contain}
 .fit-wide .cover-img{object-fit:contain}
-.pick-cover.has-img::after,.card-cover.has-img::after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08));pointer-events:none}
-.card-cover.poster{display:flex;align-items:flex-end;padding:24px;background:var(--surface-2)}
-.poster-title{position:relative;z-index:1;font-family:var(--sans);font-size:20px;font-weight:500;line-height:1.3;letter-spacing:0;color:var(--fg-2);max-width:20ch;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.card-body{display:flex;flex-direction:column;gap:12px;padding:20px;min-height:232px;background:var(--surface);border-top:1px solid var(--border)}
-.art-card h3{font-family:var(--sans);font-size:20px;font-weight:600;line-height:1.4;letter-spacing:0;text-wrap:balance;color:var(--fg)}
+.pick-cover.has-img::after,.card-cover.has-img::after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,oklch(0% 0 0 / .02),oklch(0% 0 0 / .08));pointer-events:none}
+.card-cover.poster{display:flex;align-items:flex-end;padding:20px 24px}
+.card-body{display:flex;flex-direction:column;gap:10px;padding:20px 20px 18px;min-height:220px;background:var(--surface);border-top:1px solid var(--border)}
+.art-card h3{font-family:var(--sans);font-size:19px;font-weight:600;line-height:1.45;letter-spacing:0;text-wrap:pretty;color:var(--fg);transition:color .16s var(--ease);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .art-card:hover h3{color:var(--accent-2)}
-.art-dek{color:var(--fg-2);font-size:14px;line-height:1.6;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.card-foot{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
-.tag-list{display:flex;flex-wrap:wrap;gap:8px}
+.art-dek{color:var(--fg-2);font-size:14px;line-height:1.65;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.card-foot{margin-top:auto;padding-top:12px;border-top:1px dashed var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.card-foot .go{color:var(--faint);transition:color .16s var(--ease),transform .16s var(--ease)}
+.art-card:hover .card-foot .go{color:var(--accent-2);transform:translateX(2px)}
+.tag-list{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.card-kicker{flex-wrap:nowrap;overflow:hidden}.card-kicker .tag-chip:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag-chip{display:inline-flex;align-items:center;color:var(--muted);font-family:var(--mono);font-size:12px}
-.tag-chip.strong{color:var(--accent-2);font-weight:500}
+.tag-chip.strong,.pill.strong{flex:none;padding:2px 8px;border-radius:999px;font-weight:500;color:color-mix(in oklch,var(--cat,var(--accent)) 82%,var(--fg));background:color-mix(in oklch,var(--cat,var(--accent)) 12%,transparent)}
+.card-kicker span+span::before{content:none}
 @media(max-width:920px){.home-title{font-size:58px}.pick-banner,.pick-banner.fit-wide{grid-template-columns:1fr;min-height:0}
   .pick-cover,.pick-cover.fit-wide.has-img{min-height:0;aspect-ratio:16/9}.pick-body{border-left:0;border-top:1px solid var(--border);padding:32px}
 }
 @media(max-width:880px){.art-grid{grid-template-columns:repeat(2,1fr)}
   .art-grid.single .art-card{display:flex}.art-grid.single .card-cover{height:auto;min-height:0;aspect-ratio:16/9}
 }
-@media(max-width:560px){.wrap{padding:20px 16px 52px}.home-hero{padding:32px 0 28px}.home-eyebrow{margin-bottom:16px}.home-title{font-size:40px;line-height:1.1}.mobile-break{display:block}.home-tagline{margin-top:20px;font-size:14px;line-height:1.65}
+@media(max-width:560px){.wrap{padding:20px 16px 52px}.foot{width:calc(100% - 32px)}.home-hero{padding:32px 0 28px}.home-eyebrow{margin-bottom:16px}.home-title{font-size:40px;line-height:1.1}.home-tagline{margin-top:20px;font-size:14px;line-height:1.65}
   .filters{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:20px;padding-bottom:4px;scrollbar-width:none}.filters::-webkit-scrollbar{display:none}
   .pick-banner,.pick-banner.fit-wide{grid-template-columns:1fr}.pick-cover,.pick-cover.fit-wide.has-img{aspect-ratio:16/9}.pick-body{padding:24px}.pick-title{font-size:24px}
-  .art-grid{grid-template-columns:1fr}.card-body{min-height:208px}}
+  .art-grid{grid-template-columns:1fr;gap:20px}.card-body{min-height:0}}
 """
 
 _DETAIL_CSS = """
@@ -345,6 +355,7 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(30px,3.4vw,46p
 .chapters{display:flex;gap:8px;overflow-x:auto;padding:14px 0 6px;margin-bottom:8px;border-bottom:1px solid var(--border);scrollbar-width:thin}
 .chapters::-webkit-scrollbar{height:4px}
 .chapters::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:2px}
+.doc a.chap{text-decoration:none;color:var(--fg)}
 .chap{flex:none;display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:border-color .16s var(--ease),background-color .16s var(--ease);min-width:140px;text-decoration:none}
 .chap:hover{border-color:var(--accent-line);background:var(--surface-2)}
 .chap .ts{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:0;color:var(--accent-2);font-variant-numeric:tabular-nums}
@@ -698,6 +709,24 @@ def _item_cover(item):
     return ""
 
 
+def _css_url(src):
+    """封面地址 → CSS url() 值(供 contain 封面的模糊底图);剥掉会逃逸 CSS 字符串的字符。"""
+    safe = re.sub(r'[\x00-\x1f"\\]', "", src or "")
+    return f'url("{safe}")'
+
+
+def _cover_style(fit, layout_style, cover):
+    style = layout_style + (f"--cover-src:{_css_url(cover)};" if "fit-contain" in fit else "")
+    return f' style="{_e(style)}"' if style else ""
+
+
+def _poster_mark(it):
+    """无封面时的海报:类别色 + 雷达环,只放来源与内容类型,不重复卡片标题。"""
+    src = it.get("source_label") or "AI Radar"
+    return (f'<div class="poster-mark"><span class="poster-src">{_e(src)}</span>'
+            f'<span class="poster-kind">{_e(_deep_kind(it))}</span></div>')
+
+
 def _deep_kind(item):
     if (item.get("translation_md") or "").strip():
         return "全文翻译"
@@ -816,26 +845,18 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         cover = cover if cover is not None else _item_cover(it)
         if cover:
             fit, layout_style, _banner_fit = _cover_layout(it, cover)
-            style = f' style="{layout_style}"' if layout_style else ""
-            return (f'<div class="card-cover has-img{fit} {cat_cls}"{style}>'
+            return (f'<div class="card-cover has-img{fit} {cat_cls}"{_cover_style(fit, layout_style, cover)}>'
                     f'<img class="cover-img" src="{_e(cover)}" alt="" loading="lazy" decoding="async"></div>')
-        title = it.get("title_zh") or it.get("title") or ""
-        first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:42] or "AI")
-        return (f'<div class="card-cover poster {cat_cls}">'
-                f'<div class="poster-title">{_e(first)}</div></div>')
+        return f'<div class="card-cover poster {cat_cls}" aria-hidden="true">{_poster_mark(it)}</div>'
 
     def _pick_cover_html(it, cover=None):
         cat_cls = _cat_class(it.get("category", ""))
         cover = cover if cover is not None else _item_cover(it)
         if cover:
             fit, layout_style, _banner_fit = _cover_layout(it, cover)
-            style = f' style="{layout_style}"' if layout_style else ""
-            return (f'<div class="pick-cover has-img{fit} {cat_cls}"{style}>'
+            return (f'<div class="pick-cover has-img{fit} {cat_cls}"{_cover_style(fit, layout_style, cover)}>'
                     f'<img class="cover-img" src="{_e(cover)}" alt="" fetchpriority="high" decoding="async"></div>')
-        title = it.get("title_zh") or it.get("title") or ""
-        first = (re.split(r"[。.!?？]", title.strip(), 1)[0].strip()[:60] or "AI")
-        return (f'<div class="pick-cover poster {cat_cls}">'
-                f'<div class="poster-title">{_e(first)}</div></div>')
+        return f'<div class="pick-cover poster {cat_cls}" aria-hidden="true">{_poster_mark(it)}</div>'
 
     def _article_card(it):
         href, ext_attr = _home_href(it)
@@ -843,23 +864,19 @@ def _render_home(items, _descriptions, _methods, interactions, out):
         title = it.get("title_zh") or it.get("title") or ""
         dek = _excerpt(it)
         when = _card_time(it)
-        tags = [_deep_kind(it)]
-        if cat and cat not in tags:
-            tags.append(cat)
+        kind = _deep_kind(it)
         src = it.get("source_label", "")
-        if src:
-            tags.append(src)
-        tag_html = "".join(
-            f'<span class="tag-chip{" strong" if i == 0 else ""}">{_e(t)}</span>'
-            for i, t in enumerate(tags[:3]) if t
-        )
+        tag_html = f'<span class="tag-chip strong">{_e(kind)}</span>' + (
+            f'<span class="tag-chip">{_e(src)}</span>' if src else "")
+        foot_bits = " · ".join(b for b in (cat if cat != kind else "", when) if b)
         dek_html = f'<p class="art-dek">{_e(dek)}</p>' if dek else ""
-        blob = _e(f"{title} {dek} {src} {cat} {' '.join(tags)}".lower())
+        blob = _e(f"{title} {dek} {src} {cat} {kind}".lower())
         return (f'<a class="art-card {_cat_class(cat)}" data-card data-cat="{_e(cat)}" data-text="{blob}" href="{_e(href)}"{ext_attr}>'
                 f'{_cover_html(it)}<div class="card-body">'
+                f'<div class="tag-list card-kicker">{tag_html}</div>'
                 f'<h3>{_e(title)}</h3>{dek_html}'
-                f'<div class="card-foot"><span class="tag-list">{tag_html}</span>'
-                f'<span>{_e(when)}</span></div></div></a>')
+                f'<div class="card-foot"><span>{_e(foot_bits)}</span>'
+                f'<span class="go" aria-hidden="true">阅读 →</span></div></div></a>')
 
     hero_html = (
         '<section class="home-hero">'
@@ -887,7 +904,8 @@ def _render_home(items, _descriptions, _methods, interactions, out):
             f'<span>{_e(pick_item.get("source_label",""))}</span><span>{_e(cat)}</span></div>'
             f'<h2 class="pick-title">{_e(title)}</h2>'
             f'{dek_html}'
-            f'<div class="pick-foot">{_e(_card_time(pick_item))}</div></div></a></section>')
+            f'<div class="pick-foot"><span>{_e(_card_time(pick_item))}</span>'
+            f'<span class="pick-cta" aria-hidden="true">开始阅读 →</span></div></div></a></section>')
 
     latest_html = ""
     if len(card_pool) > 1:
@@ -1130,7 +1148,7 @@ def _outline_html(outline):
     for lvl, slug, text in outline:
         cls = "h3" if lvl == 3 else "h2"
         parts.append(f'<li class="{cls}"><a href="#{slug}">{_e(text)}</a></li>')
-    return ('<aside class="outline" id="outline"><div class="outline-k">Contents</div>'
+    return ('<aside class="outline" id="outline"><div class="outline-k">目录</div>'
             '<ol>' + "".join(parts) + '</ol></aside>')
 
 
