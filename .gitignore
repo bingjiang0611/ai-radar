@@ -1,5 +1,4 @@
-# 工具配置不入 git（A1 守卫）
-CLAUDE.md
+# 工具配置不入 git（A1 守卫）；CLAUDE.md 例外，提交规则需随仓库共享
 .claude/*
 !.claude/skills/
 .claude/skills/*
