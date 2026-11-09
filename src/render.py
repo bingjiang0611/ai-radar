@@ -863,9 +863,9 @@ def _render_home(items, _descriptions, _methods, interactions, out):
 
     hero_html = (
         '<section class="home-hero">'
-        '<div class="home-eyebrow">AI Radar editorial</div>'
-        '<h1 class="home-title">在 AI 的噪音里，<span class="em">只留下<br class="mobile-break"><strong>值得读完</strong>的</span></h1>'
-        '<p class="home-tagline">人工挑选文章、视频与播客。翻译、梳理，也保留判断。</p>'
+        '<div class="home-eyebrow">AI Radar · 人工精选</div>'
+        '<h1 class="home-title">先读过，<span class="em">再<br class="mobile-break"><strong>推荐给你</strong></span></h1>'
+        '<p class="home-tagline">文章、视频和播客，由我挑选。附上中文译文或总结，也保留原文链接。</p>'
         '</section>')
 
     pick_html = ""

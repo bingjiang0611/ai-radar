@@ -625,7 +625,9 @@ class TestRender(unittest.TestCase):
         self.assertNotIn("data-word=", index)
         self.assertNotIn("art-meta", index)
         self.assertNotIn('class="pill">', index)
-        self.assertIn("值得读完</strong>的</span>", index)
+        self.assertIn("AI Radar · 人工精选", index)
+        self.assertIn('再<br class="mobile-break"><strong>推荐给你</strong></span>', index)
+        self.assertIn("文章、视频和播客，由我挑选。附上中文译文或总结，也保留原文链接。", index)
 
     def test_card_cover_uses_article_contain_and_video_cover(self):
         self.assertEqual(
