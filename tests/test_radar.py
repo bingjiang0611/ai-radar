@@ -592,6 +592,41 @@ class TestRender(unittest.TestCase):
             self.assertIn(".shell-doc{max-width:var(--reader-maxw)", detail)
             self.assertIn('id="width-toggle" class="opt" data-on="1"', detail)
 
+    def test_home_metadata_is_single_and_posters_are_not_decorative(self):
+        base = {
+            "source_id": "user-curated",
+            "source_label": "用户精选",
+            "category": "文章",
+            "title": "English",
+            "title_zh": "中文标题",
+            "summary": "",
+            "summary_zh": "中文摘要",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "published_at": "",
+            "translation_md": "## 中文段落\n\n正文",
+            "summary_md": "",
+            "video_url": "",
+        }
+        items = [
+            dict(base, hash="cover", url="https://example.com/cover",
+                 content_html='<img src="https://example.com/cover.jpg">'),
+            dict(base, hash="poster", url="https://example.com/poster", title_zh="无封面条目",
+                 translation_md="", content_html=""),
+        ]
+        with TemporaryDirectory() as td:
+            out = Path(td)
+            render.render_site(items, out_dir=out)
+            index = (out / "index.html").read_text(encoding="utf-8")
+        self.assertIn("pick-cover has-img", index)
+        self.assertIn("card-cover poster", index)
+        self.assertIn("tag-chip strong", index)
+        self.assertNotIn("cover-badge", index)
+        self.assertNotIn("poster-word", index)
+        self.assertNotIn("data-word=", index)
+        self.assertNotIn("art-meta", index)
+        self.assertNotIn('class="pill">', index)
+        self.assertIn("值得读完</strong>的</span>", index)
+
     def test_card_cover_uses_article_contain_and_video_cover(self):
         self.assertEqual(
             render._item_cover({"url": "https://www.youtube.com/watch?v=rzVhPTSNWnE"}),
