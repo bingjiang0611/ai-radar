@@ -93,6 +93,13 @@ class TestContent(unittest.TestCase):
         self.assertIn("<blockquote>q</blockquote>", out)
         self.assertIn("&lt;script&gt;", out)
 
+    def test_md_to_html_renders_single_star_emphasis(self):
+        out = content.md_to_html("一份 *计划*，重点是 `a*b*c`，字面量它\\*就是\\* tmux")
+        self.assertIn("一份 <em>计划</em>", out)
+        self.assertIn("<code>a*b*c</code>", out)
+        self.assertIn("它*就是* tmux", out)
+        self.assertNotIn("<em>*就是*</em>", out)
+
     def test_md_to_html_pipe_table(self):
         out = content.md_to_html(
             "| 路线 | 证据 |\n"

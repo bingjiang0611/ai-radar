@@ -163,6 +163,9 @@ _MD_TITLE = r'(?:"[^"]*"|&quot;.*?&quot;)'
 _MD_IMG = re.compile(r'!\[([^\]]*)\]\((\S+?)(?:\s+' + _MD_TITLE + r')?\)')
 _MD_LINK = re.compile(r'\[([^\]]+)\]\((\S+?)(?:\s+' + _MD_TITLE + r')?\)')
 _MD_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+_MD_EM = re.compile(r"(?<!\*)\*([^*\n]+?)\*(?!\*)")
+_MD_ESCAPED_STAR = re.compile(r"\\\*")
+_MD_CODE_SPAN = re.compile(r"<code>.*?</code>", re.S)
 _MD_CODE = re.compile(r"`([^`]+)`")
 _MD_TABLE_SEP = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 _MD_HR = re.compile(r"^\s*(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$")
@@ -246,6 +249,17 @@ def normalize_article_html(html):
     return _clean_html(html)
 
 
+def _emphasis_outside_code(text):
+    """把单星号强调换成 <em>，但不动 <code> 里的星号。"""
+    parts, last = [], 0
+    for m in _MD_CODE_SPAN.finditer(text):
+        parts.append(_MD_EM.sub(r"<em>\1</em>", text[last:m.start()]))
+        parts.append(m.group(0))
+        last = m.end()
+    parts.append(_MD_EM.sub(r"<em>\1</em>", text[last:]))
+    return "".join(parts)
+
+
 def _md_inline(text):
     # Entity decoding before escaping makes imported Markdown link titles usable,
     # while the final escape still keeps arbitrary embedded HTML inert.
@@ -254,6 +268,9 @@ def _md_inline(text):
     text = _MD_LINK.sub(r'<a href="\2">\1</a>', text)
     text = _MD_BOLD.sub(r"<strong>\1</strong>", text)
     text = _MD_CODE.sub(r"<code>\1</code>", text)
+    # `\*` 是字面星号，先占位再处理强调，避免误转成 <em>。
+    text = _MD_ESCAPED_STAR.sub("\x00", text)
+    text = _emphasis_outside_code(text).replace("\x00", "*")
     # Footnote markers exported by Etch are safe inline markup, not visible text.
     text = _ENCODED_SCRIPT.sub(lambda m: f"<{m.group(1)}{m.group(2).lower()}>", text)
     return text
