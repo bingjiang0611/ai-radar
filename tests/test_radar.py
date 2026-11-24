@@ -633,9 +633,11 @@ class TestRender(unittest.TestCase):
         self.assertNotIn("data-word=", index)
         self.assertNotIn("art-meta", index)
         self.assertNotIn('class="pill">', index)
-        self.assertIn("AI Radar · 人工精选", index)
-        self.assertIn('再<br class="mobile-break"><strong>推荐给你</strong></span>', index)
-        self.assertIn("文章、视频和播客，由我挑选。附上中文译文或总结，也保留原文链接。", index)
+        # 首页不再有 hero 文案,只保留视觉隐藏的 h1 供读屏/SEO。
+        self.assertIn('<h1 class="sr-only">AI 内容推荐</h1>', index)
+        self.assertNotIn("home-hero", index)
+        self.assertNotIn("先读过", index)
+        self.assertIn('class="pick-facts"', index)
 
     def test_poster_fallback_shows_source_not_duplicate_title(self):
         item = {"hash": "p1", "source_id": "user-curated", "source_label": "Simon Willison", "category": "文章",
